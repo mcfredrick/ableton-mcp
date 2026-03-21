@@ -114,15 +114,59 @@ Replace the **Mixing Assistant Roadmap** reference in CLAUDE.md with a fully ope
 
 ---
 
+---
+
+## Phase 4 — Automated Tests
+
+**Effort:** ~1–2 hours
+**New files:** `tests/test_patch_generator.py`, `tests/test_mcp_server.py`, `tests/test_remote_script.py`
+
+### What to test
+
+Tests must follow the project's testing philosophy: verify *your* logic, not that libraries work. No mocking internal state just to watch it get called — assert on observable outputs.
+
+**`test_patch_generator.py`** — unit tests for `Max4Live/generate_analyzer_patch.py`:
+- `bandpass_coeffs()` returns exactly 5 coefficients
+- Coefficients are correctly normalized (a0 term is absorbed)
+- All 6 bands produce distinct coefficient sets
+- `generate()` returns a dict with the required patcher keys
+- Correct number of boxes (plugin + plugout + 6×(biquad+peakamp+atodb+numbox+label) + title = 32)
+- Correct number of lines (6 bands × 4 connections + 2 pass-through = 26)
+- Every `live.numbox` parameter has `parameter_mmin=-70`, `parameter_mmax=0`, `parameter_enable=1`
+- Band names match the canonical list from CLAUDE.md
+
+**`test_mcp_server.py`** — unit tests for the three new MCP tools (mock the socket connection):
+- `get_track_levels` sends `"get_track_levels"` command with no params and returns JSON
+- `get_device_parameters` sends the command with correct `track_index`/`device_index`
+- `set_device_parameter` sends the command with all four params
+- Each tool returns an error string (not raises) when the connection fails
+
+**`test_remote_script.py`** — unit tests for the three new Remote Script methods (mock Live API):
+- `_get_track_levels` returns `tracks`, `return_tracks`, and `master` keys
+- `_get_track_levels` `output_meter_peak` is `max(left, right)` per track
+- `_get_device_parameters` returns correct `device_name`, `class_name`, and `parameters` list
+- `_get_device_parameters` raises `IndexError` for out-of-range track or device index
+- `_set_device_parameter` sets `param.value` and returns the new value
+- `_set_device_parameter` raises `IndexError` for out-of-range parameter index
+
+### When complete — update CLAUDE.md
+
+Add a brief **Running Tests** section under Python Development Standards:
+- Command to run: `uv run pytest`
+- What is and isn't tested (no Ableton required for unit tests; integration tests need a live session)
+
+---
+
 ## Done When
 
-- [ ] Phase 1: `get_track_levels` and `get_device_parameters` implemented and tested
-- [ ] Phase 1: CLAUDE.md updated with Phase 1 operating instructions
-- [ ] Phase 2: M4L Analyzer device built and tested on a live session
-- [ ] Phase 2: CLAUDE.md updated with Phase 2 operating instructions
-- [ ] Phase 3: Full workflow documented and tested end-to-end
-- [ ] Phase 3: CLAUDE.md fully operational (roadmap pointer removed, workflow section added)
-- [ ] README.md updated to reflect mixing assistant as a shipped feature
+- [x] Phase 1: `get_track_levels` and `get_device_parameters` implemented and tested
+- [x] Phase 1: CLAUDE.md updated with Phase 1 operating instructions
+- [x] Phase 2: M4L Analyzer device built (`Max4Live/AbletonMCP_Analyzer.amxd`)
+- [x] Phase 2: CLAUDE.md updated with Phase 2 operating instructions
+- [x] Phase 3: Full workflow documented and tested end-to-end
+- [x] Phase 3: CLAUDE.md fully operational (workflow section added)
+- [x] Phase 4: All tests written and passing (24 tests, `uv run pytest`)
+- [x] README.md updated to reflect mixing assistant as a shipped feature
 
 ## Attribution
 

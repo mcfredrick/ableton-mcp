@@ -225,11 +225,18 @@ class AbletonMCP(ControlSurface):
             elif command_type == "get_track_info":
                 track_index = params.get("track_index", 0)
                 response["result"] = self._get_track_info(track_index)
+            elif command_type == "get_track_levels":
+                response["result"] = self._get_track_levels()
+            elif command_type == "get_device_parameters":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 0)
+                response["result"] = self._get_device_parameters(track_index, device_index)
             # Commands that modify Live's state should be scheduled on the main thread
-            elif command_type in ["create_midi_track", "set_track_name", 
-                                 "create_clip", "add_notes_to_clip", "set_clip_name", 
+            elif command_type in ["create_midi_track", "set_track_name",
+                                 "create_clip", "add_notes_to_clip", "set_clip_name",
                                  "set_tempo", "fire_clip", "stop_clip",
-                                 "start_playback", "stop_playback", "load_browser_item"]:
+                                 "start_playback", "stop_playback", "load_browser_item",
+                                 "set_device_parameter", "load_analyzer_device"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -282,7 +289,16 @@ class AbletonMCP(ControlSurface):
                             track_index = params.get("track_index", 0)
                             item_uri = params.get("item_uri", "")
                             result = self._load_browser_item(track_index, item_uri)
-                        
+                        elif command_type == "set_device_parameter":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            parameter_index = params.get("parameter_index", 0)
+                            value = params.get("value", 0.0)
+                            result = self._set_device_parameter(track_index, device_index, parameter_index, value)
+                        elif command_type == "load_analyzer_device":
+                            track_index = params.get("track_index", 0)
+                            result = self._load_analyzer_device(track_index)
+
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
                     except Exception as e:
@@ -757,7 +773,23 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error loading browser item: {0}".format(str(e)))
             self.log_message(traceback.format_exc())
             raise
-    
+
+    def _load_analyzer_device(self, track_index):
+        """Load the AbletonMCP Analyzer M4L device onto the given track"""
+        result = self.get_browser_items_at_path("audio_effects/Max Audio Effect")
+        items = result.get("items", [])
+        analyzer_item = None
+        for item in items:
+            name = item.get("name", "")
+            if "abletonmcp" in name.lower():
+                analyzer_item = item
+                break
+        if analyzer_item is None:
+            raise RuntimeError("AbletonMCP Analyzer not found in browser. Run install.py first.")
+        load_result = self._load_browser_item(track_index, analyzer_item["uri"])
+        load_result["device_name"] = analyzer_item["name"]
+        return load_result
+
     def _find_browser_item_by_uri(self, browser_or_item, uri, max_depth=10, current_depth=0):
         """Find a browser item by its URI"""
         try:
@@ -1059,4 +1091,109 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error getting browser items at path: {0}".format(str(e)))
             self.log_message(traceback.format_exc())
+            raise
+
+    def _get_track_levels(self):
+        """Return output meter levels for all tracks, return tracks, and master."""
+        try:
+            tracks = []
+            for i, track in enumerate(self._song.tracks):
+                left = track.output_meter_left
+                right = track.output_meter_right
+                tracks.append({
+                    "index": i,
+                    "name": track.name,
+                    "output_meter_left": left,
+                    "output_meter_right": right,
+                    "output_meter_peak": max(left, right),
+                })
+
+            return_tracks = []
+            for i, track in enumerate(self._song.return_tracks):
+                left = track.output_meter_left
+                right = track.output_meter_right
+                return_tracks.append({
+                    "index": i,
+                    "name": track.name,
+                    "output_meter_left": left,
+                    "output_meter_right": right,
+                    "output_meter_peak": max(left, right),
+                })
+
+            master = self._song.master_track
+            return {
+                "tracks": tracks,
+                "return_tracks": return_tracks,
+                "master": {
+                    "output_meter_left": master.output_meter_left,
+                    "output_meter_right": master.output_meter_right,
+                    "output_meter_peak": max(master.output_meter_left, master.output_meter_right),
+                },
+            }
+        except Exception as e:
+            self.log_message("Error getting track levels: " + str(e))
+            raise
+
+    def _get_device_parameters(self, track_index, device_index):
+        """Return all parameters for a device on a track."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+
+            track = self._song.tracks[track_index]
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+
+            device = track.devices[device_index]
+            parameters = []
+            for i, param in enumerate(device.parameters):
+                parameters.append({
+                    "index": i,
+                    "name": param.name,
+                    "value": param.value,
+                    "min": param.min,
+                    "max": param.max,
+                    "is_quantized": param.is_quantized,
+                })
+
+            return {
+                "track_index": track_index,
+                "device_index": device_index,
+                "device_name": device.name,
+                "class_name": device.class_name,
+                "parameters": parameters,
+            }
+        except Exception as e:
+            self.log_message("Error getting device parameters: " + str(e))
+            raise
+
+    def _set_device_parameter(self, track_index, device_index, parameter_index, value):
+        """Set a parameter value on a device."""
+        try:
+            if track_index < 0 or track_index >= len(self._song.tracks):
+                raise IndexError("Track index out of range")
+
+            track = self._song.tracks[track_index]
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+
+            device = track.devices[device_index]
+
+            if parameter_index < 0 or parameter_index >= len(device.parameters):
+                raise IndexError("Parameter index out of range")
+
+            param = device.parameters[parameter_index]
+            param.value = value
+
+            return {
+                "track_index": track_index,
+                "device_index": device_index,
+                "parameter_index": parameter_index,
+                "name": param.name,
+                "value": param.value,
+            }
+        except Exception as e:
+            self.log_message("Error setting device parameter: " + str(e))
             raise

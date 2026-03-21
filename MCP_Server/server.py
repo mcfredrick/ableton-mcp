@@ -105,7 +105,8 @@ class AbletonConnection:
             "create_midi_track", "create_audio_track", "set_track_name",
             "create_clip", "add_notes_to_clip", "set_clip_name",
             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
-            "start_playback", "stop_playback", "load_instrument_or_effect"
+            "start_playback", "stop_playback", "load_instrument_or_effect",
+            "load_analyzer_device",
         ]
         
         try:
@@ -601,6 +602,99 @@ def get_browser_items_at_path(ctx: Context, path: str) -> str:
         else:
             logger.error(f"Error getting browser items at path: {error_msg}")
             return f"Error getting browser items at path: {error_msg}"
+
+@mcp.tool()
+def get_track_levels(ctx: Context) -> str:
+    """
+    Get real-time output meter levels for all tracks, return tracks, and master.
+
+    Returns peak meter values (0.0–1.0) for left, right, and combined peak per track.
+    Use this to audit gain staging across the session.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_track_levels")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting track levels: {str(e)}")
+        return f"Error getting track levels: {str(e)}"
+
+
+@mcp.tool()
+def get_device_parameters(ctx: Context, track_index: int, device_index: int) -> str:
+    """
+    Get all parameters for a device on a track.
+
+    Parameters:
+    - track_index: The index of the track
+    - device_index: The index of the device on that track
+
+    Returns each parameter's index, name, current value, min, max, and whether it is quantized.
+    Use this to read EQ Eight band settings, compressor gain reduction, Utility gain/width, etc.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_device_parameters", {
+            "track_index": track_index,
+            "device_index": device_index,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting device parameters: {str(e)}")
+        return f"Error getting device parameters: {str(e)}"
+
+
+@mcp.tool()
+def set_device_parameter(
+    ctx: Context,
+    track_index: int,
+    device_index: int,
+    parameter_index: int,
+    value: float,
+) -> str:
+    """
+    Set a parameter value on a device.
+
+    Parameters:
+    - track_index: The index of the track
+    - device_index: The index of the device on that track
+    - parameter_index: The index of the parameter (from get_device_parameters)
+    - value: The new value (must be within the parameter's min/max range)
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_device_parameter", {
+            "track_index": track_index,
+            "device_index": device_index,
+            "parameter_index": parameter_index,
+            "value": value,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting device parameter: {str(e)}")
+        return f"Error setting device parameter: {str(e)}"
+
+
+@mcp.tool()
+def load_analyzer_device(ctx: Context, track_index: int) -> str:
+    """
+    Load the AbletonMCP Analyzer M4L device onto a track.
+
+    The device must be installed first (run install.py). It will be placed
+    at the end of the track's device chain. Use get_track_info to find the
+    device index after loading, then get_device_parameters to read band levels.
+
+    Parameters:
+    - track_index: The index of the track to load the analyzer on
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("load_analyzer_device", {"track_index": track_index})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error loading analyzer device: {str(e)}")
+        return f"Error loading analyzer device: {str(e)}"
+
 
 @mcp.tool()
 def load_drum_kit(ctx: Context, track_index: int, rack_uri: str, kit_path: str) -> str:

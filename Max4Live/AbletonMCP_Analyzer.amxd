@@ -1,0 +1,1134 @@
+{
+  "patcher": {
+    "fileversion": 1,
+    "appversion": {
+      "major": 8,
+      "minor": 6,
+      "revision": 0,
+      "architecture": "x64",
+      "modernui": 1
+    },
+    "classnamespace": "dsp.devicepreprocessor",
+    "rect": [
+      100,
+      100,
+      960,
+      340
+    ],
+    "bglocked": 0,
+    "openinpresentation": 0,
+    "default_fontsize": 12.0,
+    "default_fontface": 0,
+    "default_fontname": "Arial",
+    "gridonopen": 1,
+    "gridsize": [
+      15.0,
+      15.0
+    ],
+    "gridsnaponopen": 1,
+    "objectsnaponopen": 1,
+    "statusbarvisible": 2,
+    "toolbarvisible": 1,
+    "boxes": [
+      {
+        "box": {
+          "id": "obj-title",
+          "maxclass": "comment",
+          "text": "AbletonMCP Analyzer \u2014 6-band RMS level meter",
+          "patching_rect": [
+            10,
+            8,
+            500,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-plugin",
+          "maxclass": "newobj",
+          "text": "plugin~",
+          "patching_rect": [
+            390,
+            30,
+            80,
+            22
+          ],
+          "numinlets": 0,
+          "numoutlets": 2,
+          "outlettype": [
+            "signal",
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-plugout",
+          "maxclass": "newobj",
+          "text": "plugout~",
+          "patching_rect": [
+            480,
+            30,
+            80,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-0",
+          "maxclass": "newobj",
+          "text": "biquad~ -1.98863429 0.98866658 0.00283335 0.00000000 -0.00283335",
+          "patching_rect": [
+            50,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-0",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            50,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-0",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            50,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-0",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            50,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "Sub Level"
+              },
+              "parameter_shortname": {
+                "value": "Sub"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-0",
+          "maxclass": "comment",
+          "text": "Sub (40 Hz)",
+          "patching_rect": [
+            50,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-1",
+          "maxclass": "newobj",
+          "text": "biquad~ -1.98936215 0.98960649 0.00779513 0.00000000 -0.00779513",
+          "patching_rect": [
+            190,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-1",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            190,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-1",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            190,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-1",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            190,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "Low Level"
+              },
+              "parameter_shortname": {
+                "value": "Low"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-1",
+          "maxclass": "comment",
+          "text": "Low (110 Hz)",
+          "patching_rect": [
+            190,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-2",
+          "maxclass": "newobj",
+          "text": "biquad~ -1.96844200 0.97043871 0.02217096 0.00000000 -0.02217096",
+          "patching_rect": [
+            330,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-2",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            330,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-2",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            330,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-2",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            330,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "LoMid Level"
+              },
+              "parameter_shortname": {
+                "value": "LoMid"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-2",
+          "maxclass": "comment",
+          "text": "LoMid (316 Hz)",
+          "patching_rect": [
+            330,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-3",
+          "maxclass": "newobj",
+          "text": "biquad~ -1.89026594 0.90961517 0.06778863 0.00000000 -0.06778863",
+          "patching_rect": [
+            470,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-3",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            470,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-3",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            470,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-3",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            470,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "Mid Level"
+              },
+              "parameter_shortname": {
+                "value": "Mid"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-3",
+          "maxclass": "comment",
+          "text": "Mid (1000 Hz)",
+          "patching_rect": [
+            470,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-4",
+          "maxclass": "newobj",
+          "text": "biquad~ -1.42722025 0.69513038 0.22865221 0.00000000 -0.22865221",
+          "patching_rect": [
+            610,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-4",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            610,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-4",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            610,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-4",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            610,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "HiMid Level"
+              },
+              "parameter_shortname": {
+                "value": "HiMid"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-4",
+          "maxclass": "comment",
+          "text": "HiMid (4000 Hz)",
+          "patching_rect": [
+            610,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      },
+      {
+        "box": {
+          "id": "obj-bq-5",
+          "maxclass": "newobj",
+          "text": "biquad~ 0.16219657 0.17136826 0.29002111 0.00000000 -0.29002111",
+          "patching_rect": [
+            750,
+            80,
+            130,
+            22
+          ],
+          "numinlets": 2,
+          "numoutlets": 1,
+          "outlettype": [
+            "signal"
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-pa-5",
+          "maxclass": "newobj",
+          "text": "peakamp~ 1024",
+          "patching_rect": [
+            750,
+            130,
+            100,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-db-5",
+          "maxclass": "newobj",
+          "text": "atodb",
+          "patching_rect": [
+            750,
+            180,
+            60,
+            22
+          ],
+          "numinlets": 1,
+          "numoutlets": 1,
+          "outlettype": [
+            ""
+          ]
+        }
+      },
+      {
+        "box": {
+          "id": "obj-nb-5",
+          "maxclass": "live.numbox",
+          "patching_rect": [
+            750,
+            230,
+            120,
+            40
+          ],
+          "numinlets": 1,
+          "numoutlets": 2,
+          "outlettype": [
+            "",
+            "bang"
+          ],
+          "parameter_enable": 1,
+          "saved_attribute_attributes": {
+            "valueof": {
+              "parameter_enable": {
+                "value": 1
+              },
+              "parameter_longname": {
+                "value": "Hi Level"
+              },
+              "parameter_shortname": {
+                "value": "Hi"
+              },
+              "parameter_mmin": {
+                "value": -70.0
+              },
+              "parameter_mmax": {
+                "value": 0.0
+              },
+              "parameter_type": {
+                "value": 0
+              },
+              "parameter_unitstyle": {
+                "value": 2
+              },
+              "parameter_initial": {
+                "value": [
+                  -70.0
+                ]
+              },
+              "parameter_initial_enable": {
+                "value": 1
+              }
+            }
+          }
+        }
+      },
+      {
+        "box": {
+          "id": "obj-lbl-5",
+          "maxclass": "comment",
+          "text": "Hi (12000 Hz)",
+          "patching_rect": [
+            750,
+            280,
+            130,
+            20
+          ],
+          "numinlets": 1,
+          "numoutlets": 0,
+          "outlettype": []
+        }
+      }
+    ],
+    "lines": [
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-plugout",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            1
+          ],
+          "destination": [
+            "obj-plugout",
+            1
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-0",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-0",
+            0
+          ],
+          "destination": [
+            "obj-pa-0",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-0",
+            0
+          ],
+          "destination": [
+            "obj-db-0",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-0",
+            0
+          ],
+          "destination": [
+            "obj-nb-0",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-1",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-1",
+            0
+          ],
+          "destination": [
+            "obj-pa-1",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-1",
+            0
+          ],
+          "destination": [
+            "obj-db-1",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-1",
+            0
+          ],
+          "destination": [
+            "obj-nb-1",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-2",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-2",
+            0
+          ],
+          "destination": [
+            "obj-pa-2",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-2",
+            0
+          ],
+          "destination": [
+            "obj-db-2",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-2",
+            0
+          ],
+          "destination": [
+            "obj-nb-2",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-3",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-3",
+            0
+          ],
+          "destination": [
+            "obj-pa-3",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-3",
+            0
+          ],
+          "destination": [
+            "obj-db-3",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-3",
+            0
+          ],
+          "destination": [
+            "obj-nb-3",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-4",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-4",
+            0
+          ],
+          "destination": [
+            "obj-pa-4",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-4",
+            0
+          ],
+          "destination": [
+            "obj-db-4",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-4",
+            0
+          ],
+          "destination": [
+            "obj-nb-4",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-plugin",
+            0
+          ],
+          "destination": [
+            "obj-bq-5",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-bq-5",
+            0
+          ],
+          "destination": [
+            "obj-pa-5",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-pa-5",
+            0
+          ],
+          "destination": [
+            "obj-db-5",
+            0
+          ]
+        }
+      },
+      {
+        "patchline": {
+          "source": [
+            "obj-db-5",
+            0
+          ],
+          "destination": [
+            "obj-nb-5",
+            0
+          ]
+        }
+      }
+    ],
+    "dependency_cache": [],
+    "autosave": 0
+  }
+}

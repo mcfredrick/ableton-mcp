@@ -1,6 +1,6 @@
 # AbletonMCP — Ableton Live + Claude Code Integration
 
-A fork of [ahujasid/ableton-mcp](https://github.com/ahujasid/ableton-mcp) extended with a Claude Code mixing assistant roadmap, distilled reference material, and improved local development setup.
+A fork of [ahujasid/ableton-mcp](https://github.com/ahujasid/ableton-mcp) extended with a full-featured Claude Code mixing assistant: real-time meter levels, device parameter read/write, a custom Max4Live frequency analyzer, and an 8-step data-driven mixing workflow.
 
 > **Original project** by [Siddharth Ahuja](https://x.com/sidahuj) — MIT License.
 > Join the community: [Discord](https://discord.gg/3ZrMyGKnaU)
@@ -21,10 +21,11 @@ AbletonMCP connects Ableton Live to Claude AI through the Model Context Protocol
 - **Session control** — playback, clip firing, tempo
 
 ### Mixing Assistant (this fork)
-- **Distilled mixing reference** — Bobby Owsinski's EQ, dynamics, and mastering guidelines baked into `CLAUDE.md` so Claude applies them automatically
-- **Standard track setup** — every track gets EQ Eight + Utility + Spectrum for consistent gain staging and frequency visibility
-- **Actionable EQ rules** — HPF tables, the 6 trouble frequencies, EQ juggling for clarity, all in a form Claude can act on
-- **Roadmap to real-time analysis** — three-phase plan to extend the MCP with meter levels, device parameter reading, and a custom Max4Live FFT device so Claude can make data-driven mixing decisions (see [`MIXING_ASSISTANT_ROADMAP.md`](MIXING_ASSISTANT_ROADMAP.md))
+- **Real-time meter levels** — `get_track_levels` polls output meters across the whole session so Claude can audit gain staging instantly
+- **Device parameter read/write** — `get_device_parameters` and `set_device_parameter` let Claude read EQ Eight bands, compressor GR, Utility gain/width, and apply targeted corrections directly
+- **Max4Live frequency analyzer** — `AbletonMCP_Analyzer.amxd` is a custom M4L audio effect that runs a 6-band RMS analysis (Sub/Low/LoMid/Mid/HiMid/Hi) and exposes the results as Live parameters Claude can read
+- **8-step mixing workflow** — gain staging audit → device inventory → HPF audit → frequency map → masking detection → trouble frequency check → apply corrections → verify; all from a Claude Code conversation
+- **Distilled mixing reference** — Bobby Owsinski's EQ, dynamics, and mastering guidelines baked into `CLAUDE.md` as operating instructions Claude applies automatically
 
 ---
 
@@ -117,27 +118,35 @@ uvx ableton-mcp
 - "Create an 80s synthwave track"
 - "Add a Metro Boomin style hip-hop beat"
 
-**Mixing (current — rule-based):**
+**Mixing:**
 - "Check the EQ Eight settings on each track and flag any missing high-pass filters"
-- "Review the signal chain on the bass track and suggest improvements"
-- "Walk me through the 6 trouble frequencies on the drum bus"
-
-**Mixing (coming — data-driven, see roadmap):**
-- "Scan all tracks for frequency masking and suggest targeted EQ cuts"
 - "Read the gain levels across the session and flag anything that needs attention"
+- "Scan all tracks for frequency masking and suggest targeted EQ cuts"
 - "Run a full mix analysis and apply corrections"
+- "Audit the HPF settings on every track against the standard cutoffs"
 
 ---
 
-## Mixing Assistant Roadmap
-
-See [`MIXING_ASSISTANT_ROADMAP.md`](MIXING_ASSISTANT_ROADMAP.md) for the full three-phase plan:
+## Mixing Assistant
 
 | Phase | What | Status |
 |-------|------|--------|
-| 1 | MCP extension: `get_track_levels` + `get_device_parameters` | Planned |
-| 2 | Max4Live FFT analysis device | Planned |
-| 3 | Full CC mixing workflow (measure → analyze → fix → verify) | Planned |
+| 1 | MCP extension: `get_track_levels`, `get_device_parameters`, `set_device_parameter` | ✅ Done |
+| 2 | Max4Live 6-band RMS analyzer (`Max4Live/AbletonMCP_Analyzer.amxd`) | ✅ Done |
+| 3 | Full CC mixing workflow (measure → analyze → fix → verify) | ✅ Done |
+| 4 | Automated tests (24 unit tests, `uv run pytest`) | ✅ Done |
+
+### Installing Everything
+
+Run the setup script to install the Remote Script, M4L analyzer, and MCP server config in one step:
+
+```bash
+python install.py
+```
+
+Then restart Ableton and Claude Code.
+
+To manually install just the Max4Live analyzer: drag `Max4Live/AbletonMCP_Analyzer.amxd` onto a track in Ableton as an audio effect.
 
 ---
 
@@ -146,8 +155,10 @@ See [`MIXING_ASSISTANT_ROADMAP.md`](MIXING_ASSISTANT_ROADMAP.md) for the full th
 ```
 AbletonMCP_Remote_Script/   # Ableton MIDI Remote Script (socket server)
 MCP_Server/                 # MCP server (Claude ↔ socket bridge)
-CLAUDE.md                   # Operating instructions for Claude Code
-MIXING_ASSISTANT_ROADMAP.md # Plan for real-time audio analysis features
+Max4Live/                   # AbletonMCP Analyzer M4L device (6-band RMS)
+tests/                      # Automated tests (uv run pytest)
+CLAUDE.md                   # Operating instructions and mixing reference for Claude Code
+MIXING_ASSISTANT_ROADMAP.md # Implementation history
 ```
 
 ---

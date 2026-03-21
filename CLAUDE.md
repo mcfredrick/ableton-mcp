@@ -24,6 +24,35 @@ Subagents inherit routing automatically. Keep responses under 500 words. Write a
 
 ---
 
+## Python Development Standards
+
+This project has **two separate Python environments** — never mix their conventions:
+
+| Component | Environment | Constraints |
+|-----------|-------------|-------------|
+| `AbletonMCP_Remote_Script/` | Ableton's embedded Python (2/3 compat) | No pip packages; use only stdlib + `_Framework`; `from __future__ import` guards required |
+| `MCP_Server/` | Standard Python 3 via `uv` | Full pip ecosystem; FastMCP; type hints encouraged |
+
+**Remote Script rules:**
+- Maintain Python 2/3 compatibility (`try: import Queue` pattern, `.encode('utf-8')` guards)
+- All Live API calls that modify state **must** run on the main thread via `self.schedule_message(0, fn)` with a `queue.Queue` for the response
+- Read-only Live API calls (meter levels, parameter reads) can run directly on the socket thread
+- Never import third-party packages
+
+**MCP Server rules:**
+- Each tool function must have a clear docstring explaining parameters and return shape
+- Add new command types to `is_modifying_command` if they change Live state
+- Return `json.dumps(result, indent=2)` for structured data; plain string for simple confirmations
+
+**Running tests:**
+```bash
+uv run pytest          # all 24 unit tests (no Ableton required)
+uv run pytest -v       # verbose output
+```
+Unit tests cover: M4L patch generator math and structure, MCP server tool routing, Remote Script method logic. Integration tests (live Ableton session) are not automated — test manually with a real session.
+
+---
+
 # Ableton MCP
 
 ## Architecture
@@ -121,7 +150,7 @@ Always add these devices in this order after the instrument/sound source:
 2. **Utility** — gain staging, width control, mono check (flip phase to check compatibility)
 3. **Spectrum** — visual frequency reference for CC analysis sessions
 
-When the M4L Analysis Device is available (see Roadmap), add it after Spectrum.
+Add **AbletonMCP Analyzer** (Max4Live) after Spectrum once installed — see Frequency Analysis (Phase 2) below.
 
 ## Mixing Philosophy (Bobby Owsinski)
 
@@ -212,7 +241,7 @@ Instrument / Sound Source
   → Compressor    (dynamics after tone is shaped)
   → Utility       (gain staging, width, phase check)
   → Spectrum      (visual reference)
-  → [M4L Analysis Device when built]
+  → AbletonMCP Analyzer
   → Send → Reverb bus
   → Send → Delay bus
 ```
@@ -224,10 +253,192 @@ Drum Rack
   → Glue Compressor (bus glue)
   → Utility
   → Spectrum
+  → AbletonMCP Analyzer
 ```
 
 ---
 
-## Mixing Assistant Roadmap
+## Reading Live Data (Phase 1)
 
-See [`MIXING_ASSISTANT_ROADMAP.md`](MIXING_ASSISTANT_ROADMAP.md) for the full plan to extend CC into a real-time audio analysis mixing assistant (meter levels, device parameter reading, Max4Live FFT device). Each phase includes instructions for updating this CLAUDE.md file with operating instructions as features are completed.
+These MCP tools give CC real-time data from the session — not rule-of-thumb advice.
+
+### `get_track_levels`
+
+No parameters. Returns output meter levels (0.0–1.0) for every track, return track, and master.
+
+```json
+{
+  "tracks": [
+    { "index": 0, "name": "Bass", "output_meter_left": 0.42, "output_meter_right": 0.44, "output_meter_peak": 0.44 },
+    ...
+  ],
+  "return_tracks": [...],
+  "master": { "output_meter_left": 0.71, "output_meter_right": 0.69, "output_meter_peak": 0.71 }
+}
+```
+
+Note: meter values are instantaneous snapshots — call during playback for meaningful readings.
+Values above ~0.89 (approx –1 dBFS) on any track indicate a hot signal that needs gain staging.
+
+### `get_device_parameters`
+
+Parameters: `track_index`, `device_index`
+
+Returns all parameters for the specified device: index, name, current value, min, max, is_quantized.
+
+```json
+{
+  "device_name": "EQ Eight",
+  "class_name": "Eq8",
+  "parameters": [
+    { "index": 0, "name": "1 Filter Active", "value": 1.0, "min": 0.0, "max": 1.0, "is_quantized": true },
+    { "index": 1, "name": "1 Frequency A",   "value": 80.0, "min": 10.0, "max": 22000.0, "is_quantized": false },
+    { "index": 2, "name": "1 Gain A",        "value": 0.0,  "min": -15.0, "max": 15.0, "is_quantized": false },
+    { "index": 3, "name": "1 Resonance A",   "value": 0.71, "min": 0.1, "max": 9.9, "is_quantized": false },
+    ...
+  ]
+}
+```
+
+### `set_device_parameter`
+
+Parameters: `track_index`, `device_index`, `parameter_index`, `value`
+
+Sets a device parameter to a new value. Always read parameters first to get the correct index and verify min/max bounds.
+
+### HPF Audit Workflow
+
+To verify HPF settings across all tracks in one pass:
+
+1. `get_session_info` → get track count
+2. For each track: `get_track_info` → find device index of EQ Eight (class_name `Eq8`)
+3. `get_device_parameters(track_index, eq_device_index)` → find the HPF band frequency parameter
+4. Compare against the standard cutoffs from the EQ Rules table
+5. Flag any track where HPF is missing or set too low; apply corrections via `set_device_parameter`
+
+### Standard Track Setup — Auto-Verification
+
+With Phase 1 in place, CC can verify the standard setup on any track:
+- Confirm EQ Eight is present (check `get_track_info` devices list)
+- Confirm Utility is present and gain-staged appropriately
+- Read Compressor threshold/ratio and flag over-compression (ratio > 8:1 is aggressive)
+- Read Utility width parameter — confirm bass/kick are mono (width = 0)
+
+---
+
+## Frequency Analysis (Phase 2)
+
+The **AbletonMCP Analyzer** Max4Live device (`Max4Live/AbletonMCP_Analyzer.amxd`) provides real-time per-band frequency analysis via Live parameters. No Max/MSP required — `.amxd` files are Max patches and Ableton loads them directly.
+
+### Installing the device
+
+Run the setup script once (also installs the Remote Script and configures the MCP server):
+
+```bash
+python install.py
+```
+
+After restarting Ableton, Claude can load the analyzer onto any track automatically:
+
+> "Load the AbletonMCP Analyzer on track 2"
+
+Or call `load_analyzer_device(track_index=2)` directly.
+
+### Reading band levels
+
+Once the device is on a track (e.g., device index 5), call:
+
+```
+get_device_parameters(track_index=0, device_index=5)
+```
+
+The 6 named parameters and what they represent:
+
+| Parameter name | Band     | Frequency range | Value range |
+|----------------|----------|-----------------|-------------|
+| Sub Level      | Sub      | 20–60 Hz        | -70 to 0 dB |
+| Low Level      | Low      | 60–200 Hz       | -70 to 0 dB |
+| LoMid Level    | Lo-Mid   | 200–500 Hz      | -70 to 0 dB |
+| Mid Level      | Mid      | 500–2000 Hz     | -70 to 0 dB |
+| HiMid Level    | Hi-Mid   | 2000–8000 Hz    | -70 to 0 dB |
+| Hi Level       | Hi       | 8000+ Hz        | -70 to 0 dB |
+
+Values are peak amplitude in dB over ~23ms windows. Values near -70 dB = silence; values near 0 dB = full signal.
+
+### Detecting masking conflicts
+
+Scan all tracks' M4L Analyzer devices to build a full-session frequency map. A **masking conflict** exists when two or more tracks have the same band with energy above -20 dB. Example detection logic:
+
+1. For each track, read its M4L Analyzer parameters → store as `{track_name: {band: level_db}}`
+2. For each band, find all tracks with level > -20 dB
+3. If more than one track is loud in the same band, flag it with the specific tracks and dB levels
+4. Cross-reference the 6 trouble frequencies from the EQ Rules table
+
+---
+
+## CC Mixing Session
+
+With Phase 1 + 2 in place, a complete data-driven mixing session follows these steps:
+
+### Step 1 — Gain staging audit
+
+```
+get_track_levels()
+```
+
+Flag any track with `output_meter_peak > 0.89` (~−1 dBFS) as too hot. Target: peaks at −10 to −6 dBFS during performance (roughly 0.32–0.50).
+
+### Step 2 — Device inventory
+
+For each track, call `get_track_info(track_index)` and check the `devices` list. Confirm:
+- EQ Eight present (class_name `Eq8`)
+- Compressor or Glue Compressor present
+- Utility present
+- Spectrum present
+- AbletonMCP Analyzer present (last in chain)
+
+Note device indices for use in subsequent steps.
+
+### Step 3 — HPF audit
+
+For each track's EQ Eight, call `get_device_parameters` and find the HPF band. Compare against the standard cutoffs:
+- Kick/bass/floor tom: 40 Hz
+- Most instruments: 80–100 Hz
+- Hi-hats/cymbals: 250–500 Hz
+
+Apply corrections via `set_device_parameter`.
+
+### Step 4 — Frequency map
+
+For each track's M4L Analyzer device, read all 6 band levels. Build a table:
+
+```
+Track     | Sub  | Low  | LoMid | Mid  | HiMid | Hi
+----------|------|------|-------|------|-------|----
+Bass      | -8   | -12  | -35   | -55  | -70   | -70
+Kick      | -15  | -18  | -28   | -48  | -62   | -70
+Lead      | -70  | -45  | -22   | -14  | -18   | -35
+```
+
+### Step 5 — Masking detection
+
+Flag bands where more than one track has energy > -20 dB. State the specific conflict:
+> "Bass and Kick both have significant energy in Low (-12 dB and -18 dB). Cut 2–3 dB at 110 Hz on the Kick using a narrow Q (2–3)."
+
+### Step 6 — Trouble frequency check
+
+For each track, compare band levels against the 6 trouble frequencies:
+- 200 Hz (LoMid band): if > -20 dB, check for muddiness → narrow cut
+- 300–500 Hz (LoMid): if > -18 dB on kick → boxy sound → cut
+- 800 Hz / 1.5 kHz (Mid band): if elevated → check for harshness
+- 4–6 kHz (HiMid): if low → boost 1–2 dB, wide Q, to bring forward
+- 10 kHz+ (Hi): if low → gentle shelf boost
+
+### Step 7 — Apply corrections
+
+Use `set_device_parameter` to apply each agreed EQ move. Read `get_device_parameters` first to confirm the parameter index and verify min/max bounds.
+
+### Step 8 — Verify and sign off
+
+Re-run `get_track_levels` and `get_device_parameters` on each M4L Analyzer to confirm improvement. Run the Mastering Prep Checklist before export.
+
