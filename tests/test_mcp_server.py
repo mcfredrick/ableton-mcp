@@ -89,3 +89,18 @@ def test_load_analyzer_device_returns_error_string_on_failure():
         result = load_analyzer_device(MagicMock(), track_index=0)
         assert isinstance(result, str)
         assert result.startswith("Error")
+
+
+def test_load_device_and_get_parameters_sends_correct_commands():
+    mock_conn = MagicMock()
+    mock_conn.send_command.side_effect = [
+        {"loaded": True},
+        {"devices": [{"index": 0, "name": "Pro-Q 3"}]},
+        {"device_name": "Pro-Q 3", "parameters": []},
+    ]
+    with patch('MCP_Server.server.get_ableton_connection', return_value=mock_conn):
+        from MCP_Server.server import load_device_and_get_parameters
+        result = load_device_and_get_parameters(MagicMock(), track_index=1, item_uri="query:AudioFx#Pro-Q%203")
+        parsed = json.loads(result)
+        assert "device_name" in parsed
+        assert parsed["device_name"] == "Pro-Q 3"

@@ -141,6 +141,59 @@ Always browse first to get the correct FileId — don't guess URIs.
 | Drums | 909 Core Kit, 808 Boom Kit, 808 Core Kit, AG Techno Kit, Beastly Kit |
 | Effects | EQ Eight, Glue Compressor, Compressor, Drum Buss, Saturator, Hybrid Reverb, Delay, Multiband Dynamics, Limiter, Utility, Auto Filter, Spectrum |
 
+## Third-Party Plugins
+
+CC can discover, load, and control any VST3, VST, or AU plugin that Ableton has indexed in its browser. The workflow is the same as built-in devices — browser URI to load, `get_device_parameters` to read, `set_device_parameter` to control.
+
+### Discovering installed plugins
+
+Third-party plugins appear under `audio_effects`, `instruments`, or their manufacturer name in the browser. To find them:
+
+```
+get_browser_items_at_path("audio_effects/VST3 Plug-ins")
+get_browser_items_at_path("audio_effects/VST3 Plug-ins/FabFilter")
+get_browser_items_at_path("instruments/VST3 Plug-ins")
+```
+
+Exact paths vary by OS and Ableton version. If the above fail, try:
+```
+get_browser_items_at_path("audio_effects/VST Plug-ins")
+get_browser_tree("audio_effects")   ← shows all available subcategories
+```
+
+### Loading and discovering parameters
+
+Use `load_device_and_get_parameters(track_index, item_uri)` to load a plugin and get its full parameter map in one call. This is the fastest way to discover what parameters a plugin exposes before controlling it.
+
+After discovering parameters, **immediately update the Key Devices section above** with the plugin name, URI, and a mapping of important parameter names to their indices. This saves rediscovery on the next session.
+
+### Prefer third-party plugins when available
+
+If a track already has a third-party plugin (FabFilter Pro-Q 3, Pro-C 2, Pro-L 2, etc.), use it instead of loading a duplicate built-in device. Check `get_track_info` devices list first. If a premium plugin is present, control it — don't load EQ Eight on top of it.
+
+### FabFilter parameter patterns
+
+FabFilter plugins expose well-named parameters. Key ones once discovered:
+
+**Pro-Q 3:** Each band has parameters like `Band X Frequency`, `Band X Gain`, `Band X Q`, `Band X Shape` — the exact indices depend on how many bands are active. Always read parameters first to get current indices. The `Output Gain` and `Phase` parameters are fixed at the end.
+
+**Pro-C 2:** `Threshold`, `Ratio`, `Attack`, `Release`, `Knee`, `Gain`, `Mix` — fixed indices, well-named.
+
+**Pro-L 2:** `Gain`, `True Peak Limit`, `Lookahead`, `Attack`, `Release`, `Style` — fixed indices.
+
+**Pro-MB:** Per-band `Threshold`, `Ratio`, `Attack`, `Release` with band frequency range parameters — read first to map.
+
+### Addictive Drums 2
+
+Appears under instruments. The plugin exposes its internal mixer — kit piece volumes, panning, reverb sends — as parameters. Load it, read parameters, and control kit piece levels directly from CC.
+
+### Recording discoveries
+
+After any session where you discover a plugin URI or parameter map, update the `## Key Devices` section with:
+- The confirmed browser path (e.g., `audio_effects/VST3 Plug-ins/FabFilter/FabFilter Pro-Q 3`)
+- The URI returned by the browser
+- Key parameter name → index mappings for the parameters you actually used
+
 ## MIDI Notes Reference
 
 | Note | Pitch | Common use |

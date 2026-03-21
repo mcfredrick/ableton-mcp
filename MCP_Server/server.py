@@ -106,7 +106,7 @@ class AbletonConnection:
             "create_clip", "add_notes_to_clip", "set_clip_name",
             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
             "start_playback", "stop_playback", "load_instrument_or_effect",
-            "load_analyzer_device",
+            "load_analyzer_device", "load_browser_item",
         ]
         
         try:
@@ -694,6 +694,50 @@ def load_analyzer_device(ctx: Context, track_index: int) -> str:
     except Exception as e:
         logger.error(f"Error loading analyzer device: {str(e)}")
         return f"Error loading analyzer device: {str(e)}"
+
+
+@mcp.tool()
+def load_device_and_get_parameters(ctx: Context, track_index: int, item_uri: str) -> str:
+    """
+    Load a device onto a track by URI and immediately return all its parameters.
+
+    Use this to discover a third-party plugin's parameter names and indices in one step.
+    After calling this, use set_device_parameter with the returned parameter indices to
+    control the plugin. Use get_track_info to find the device index after loading.
+
+    Note: track_index must be a regular track (0-based index). This tool does not support
+    the master track (track_index=-1) because the master track is not in the tracks list
+    returned by get_track_info.
+
+    Parameters:
+    - track_index: The index of the track to load the device on
+    - item_uri: The browser URI of the device to load
+
+    Returns the device name, class name, and full parameter list with indices, names,
+    current values, and min/max ranges.
+    """
+    try:
+        ableton = get_ableton_connection()
+        load_result = ableton.send_command("load_browser_item", {
+            "track_index": track_index,
+            "item_uri": item_uri,
+        })
+        if not load_result.get("loaded", False):
+            return f"Failed to load device with URI '{item_uri}'"
+        track_info = ableton.send_command("get_track_info", {"track_index": track_index})
+        devices = track_info.get("devices", [])
+        if not devices:
+            return "Device loaded but could not find it on track"
+        device_index = len(devices) - 1
+        params_result = ableton.send_command("get_device_parameters", {
+            "track_index": track_index,
+            "device_index": device_index,
+        })
+        params_result["device_index"] = device_index
+        return json.dumps(params_result, indent=2)
+    except Exception as e:
+        logger.error(f"Error loading device and getting parameters: {str(e)}")
+        return f"Error loading device and getting parameters: {str(e)}"
 
 
 @mcp.tool()
