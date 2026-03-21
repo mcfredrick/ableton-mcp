@@ -56,14 +56,15 @@ Unit tests cover: M4L patch generator math and structure, MCP server tool routin
 When a mixing or mastering session reveals something new and specific to this project — a confirmed device URI, an EQ Eight parameter index that maps to a named band, a plugin parameter name that turned out to be cryptic, a workflow step that needed adjusting — update the relevant section of `CLAUDE.md` immediately without being asked.
 
 Things worth capturing:
-- Confirmed URIs for instruments and effects (add to the Browser & URIs section)
-- Third-party plugin parameter maps discovered during a session (add to Key Devices)
-- Workflow steps that consistently need adjustment (refine the CC Mixing/Mastering Session sections)
-- Track configurations that work well for specific genres or roles
+- Confirmed URIs for built-in instruments and effects → Browser & URIs section in this file
+- Third-party plugin URIs and parameter maps → `plugins/<plugin-name>.md` (not here — keeps context lean)
+- Workflow steps that consistently need adjustment → refine the CC Mixing/Mastering Session sections
+- Track configurations that work well for specific genres or roles → note under Key Devices or Signal Chain
 
 Things not worth capturing (already handled by git or derivable from code):
 - General programming patterns — those go in the user-level `~/.claude/CLAUDE.md`
 - One-off session decisions that don't generalize
+- Full parameter dumps — those belong in `plugins/`, never in CLAUDE.md
 
 ---
 
@@ -165,34 +166,24 @@ get_browser_tree("audio_effects")   ← shows all available subcategories
 
 Use `load_device_and_get_parameters(track_index, item_uri)` to load a plugin and get its full parameter map in one call. This is the fastest way to discover what parameters a plugin exposes before controlling it.
 
-After discovering parameters, **immediately update the Key Devices section above** with the plugin name, URI, and a mapping of important parameter names to their indices. This saves rediscovery on the next session.
+**Before working with any third-party plugin, check `plugins/` for an existing file.** If one exists, read it to get the URI and parameter notes. If not, discover them live and create the file when done.
 
 ### Prefer third-party plugins when available
 
 If a track already has a third-party plugin (FabFilter Pro-Q 3, Pro-C 2, Pro-L 2, etc.), use it instead of loading a duplicate built-in device. Check `get_track_info` devices list first. If a premium plugin is present, control it — don't load EQ Eight on top of it.
 
-### FabFilter parameter patterns
+### Plugin library — `plugins/` directory
 
-FabFilter plugins expose well-named parameters. Key ones once discovered:
+Plugin URIs and parameter maps live in `plugins/`, one markdown file per plugin. Load only the file you need — do not load all of them.
 
-**Pro-Q 3:** Each band has parameters like `Band X Frequency`, `Band X Gain`, `Band X Q`, `Band X Shape` — the exact indices depend on how many bands are active. Always read parameters first to get current indices. The `Output Gain` and `Phase` parameters are fixed at the end.
-
-**Pro-C 2:** `Threshold`, `Ratio`, `Attack`, `Release`, `Knee`, `Gain`, `Mix` — fixed indices, well-named.
-
-**Pro-L 2:** `Gain`, `True Peak Limit`, `Lookahead`, `Attack`, `Release`, `Style` — fixed indices.
-
-**Pro-MB:** Per-band `Threshold`, `Ratio`, `Attack`, `Release` with band frequency range parameters — read first to map.
-
-### Addictive Drums 2
-
-Appears under instruments. The plugin exposes its internal mixer — kit piece volumes, panning, reverb sends — as parameters. Load it, read parameters, and control kit piece levels directly from CC.
+- **FabFilter Pro-Q 3** — dynamic bands, always read parameters live; URI in `plugins/fabfilter-pro-q3.md` once discovered
+- **FabFilter Pro-C 2** — fixed parameter map; see `plugins/fabfilter-pro-c2.md`
+- **FabFilter Pro-L 2** — fixed parameter map; see `plugins/fabfilter-pro-l2.md`
+- **Addictive Drums 2** — exposes kit piece volumes/pan/sends; see `plugins/addictive-drums-2.md`
 
 ### Recording discoveries
 
-After any session where you discover a plugin URI or parameter map, update the `## Key Devices` section with:
-- The confirmed browser path (e.g., `audio_effects/VST3 Plug-ins/FabFilter/FabFilter Pro-Q 3`)
-- The URI returned by the browser
-- Key parameter name → index mappings for the parameters you actually used
+After discovering a plugin URI or parameter map, write or update its file in `plugins/` — not here. See `plugins/README.md` for the file format.
 
 ## MIDI Notes Reference
 
