@@ -228,43 +228,6 @@ Drum Rack
 
 ---
 
-# Mixing Assistant Roadmap
+## Mixing Assistant Roadmap
 
-This documents what needs to be built to give CC real audio analysis data (not rule-of-thumb advice).
-
-## What CC currently cannot do
-
-The Live API does not expose real-time audio buffers or FFT data directly. CC currently gives generic advice based on rules, not actual measurement of the session.
-
-## Phase 1 — MCP Extension: Meter Levels & Device Parameters (1–2 hours)
-
-Extend the Remote Script with two new commands:
-
-**`get_track_levels`** — polls `track.output_meter_left/right` for all tracks and returns peak levels. Gives CC: is this track too loud/quiet relative to others.
-
-**`get_device_parameters`** — reads all parameter name/value pairs from a device by index. Gives CC: current EQ Eight band settings, compressor GR, Utility gain. CC can then audit whether HPF is set correctly, spot missing cuts, etc.
-
-**`set_device_parameter`** — already exists in the MCP. CC can apply suggested EQ changes directly.
-
-## Phase 2 — Max4Live Analysis Device (4–8 hours)
-
-A custom M4L device placed on each track that:
-1. Runs real-time FFT via `pfft~` on the audio signal
-2. Maps energy across configurable frequency bands (at minimum: sub 20–60Hz, low 60–200Hz, low-mid 200–500Hz, mid 500–2kHz, hi-mid 2–8kHz, hi 8kHz+) to device parameters
-3. MCP reads those parameters via `get_device_parameters` — giving CC actual measured frequency content
-
-This is the key piece. With it CC can say: "Your lead has 8dB of energy at 200Hz — same as the bass. Cut 3dB at 200Hz on the lead (Q 4)."
-
-Inter-track comparison becomes possible: scan all tracks, build a frequency map, flag any frequency where more than one track is boosted.
-
-## Phase 3 — Mixing Workflow in CC
-
-With Phase 1 + 2 in place, a full mixing session becomes:
-
-1. `get_track_levels` → flag tracks that are too hot or too quiet
-2. `get_device_parameters` on each Spectrum/M4L device → build per-track frequency profile
-3. Cross-reference: detect masking (same frequency prominent on multiple tracks)
-4. Check trouble frequencies against the 6 known problem bands
-5. Check HPF settings against the standard cutoffs
-6. Suggest and apply targeted EQ moves via `set_device_parameter`
-7. Re-read levels and spectrum to confirm improvement
+See [`MIXING_ASSISTANT_ROADMAP.md`](MIXING_ASSISTANT_ROADMAP.md) for the full plan to extend CC into a real-time audio analysis mixing assistant (meter levels, device parameter reading, Max4Live FFT device). Each phase includes instructions for updating this CLAUDE.md file with operating instructions as features are completed.
