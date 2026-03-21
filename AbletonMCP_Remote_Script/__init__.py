@@ -281,10 +281,6 @@ class AbletonMCP(ControlSurface):
                             result = self._start_playback()
                         elif command_type == "stop_playback":
                             result = self._stop_playback()
-                        elif command_type == "load_instrument_or_effect":
-                            track_index = params.get("track_index", 0)
-                            uri = params.get("uri", "")
-                            result = self._load_instrument_or_effect(track_index, uri)
                         elif command_type == "load_browser_item":
                             track_index = params.get("track_index", 0)
                             item_uri = params.get("item_uri", "")
@@ -324,18 +320,6 @@ class AbletonMCP(ControlSurface):
                 except queue.Empty:
                     response["status"] = "error"
                     response["message"] = "Timeout waiting for operation to complete"
-            elif command_type == "get_browser_item":
-                uri = params.get("uri", None)
-                path = params.get("path", None)
-                response["result"] = self._get_browser_item(uri, path)
-            elif command_type == "get_browser_categories":
-                category_type = params.get("category_type", "all")
-                response["result"] = self._get_browser_categories(category_type)
-            elif command_type == "get_browser_items":
-                path = params.get("path", "")
-                item_type = params.get("item_type", "all")
-                response["result"] = self._get_browser_items(path, item_type)
-            # Add the new browser commands
             elif command_type == "get_browser_tree":
                 category_type = params.get("category_type", "all")
                 response["result"] = self.get_browser_tree(category_type)
@@ -652,92 +636,6 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error stopping playback: " + str(e))
             raise
-    
-    def _get_browser_item(self, uri, path):
-        """Get a browser item by URI or path"""
-        try:
-            # Access the application's browser instance instead of creating a new one
-            app = self.application()
-            if not app:
-                raise RuntimeError("Could not access Live application")
-                
-            result = {
-                "uri": uri,
-                "path": path,
-                "found": False
-            }
-            
-            # Try to find by URI first if provided
-            if uri:
-                item = self._find_browser_item_by_uri(app.browser, uri)
-                if item:
-                    result["found"] = True
-                    result["item"] = {
-                        "name": item.name,
-                        "is_folder": item.is_folder,
-                        "is_device": item.is_device,
-                        "is_loadable": item.is_loadable,
-                        "uri": item.uri
-                    }
-                    return result
-            
-            # If URI not provided or not found, try by path
-            if path:
-                # Parse the path and navigate to the specified item
-                path_parts = path.split("/")
-                
-                # Determine the root based on the first part
-                current_item = None
-                if path_parts[0].lower() == "nstruments":
-                    current_item = app.browser.instruments
-                elif path_parts[0].lower() == "sounds":
-                    current_item = app.browser.sounds
-                elif path_parts[0].lower() == "drums":
-                    current_item = app.browser.drums
-                elif path_parts[0].lower() == "audio_effects":
-                    current_item = app.browser.audio_effects
-                elif path_parts[0].lower() == "midi_effects":
-                    current_item = app.browser.midi_effects
-                else:
-                    # Default to instruments if not specified
-                    current_item = app.browser.instruments
-                    # Don't skip the first part in this case
-                    path_parts = ["instruments"] + path_parts
-                
-                # Navigate through the path
-                for i in range(1, len(path_parts)):
-                    part = path_parts[i]
-                    if not part:  # Skip empty parts
-                        continue
-                    
-                    found = False
-                    for child in current_item.children:
-                        if child.name.lower() == part.lower():
-                            current_item = child
-                            found = True
-                            break
-                    
-                    if not found:
-                        result["error"] = "Path part '{0}' not found".format(part)
-                        return result
-                
-                # Found the item
-                result["found"] = True
-                result["item"] = {
-                    "name": current_item.name,
-                    "is_folder": current_item.is_folder,
-                    "is_device": current_item.is_device,
-                    "is_loadable": current_item.is_loadable,
-                    "uri": current_item.uri
-                }
-            
-            return result
-        except Exception as e:
-            self.log_message("Error getting browser item: " + str(e))
-            self.log_message(traceback.format_exc())
-            raise   
-    
-    
     
     def _load_browser_item(self, track_index, item_uri):
         """Load a browser item onto a track by its URI. Use track_index=-1 for the master track."""

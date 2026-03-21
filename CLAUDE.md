@@ -46,10 +46,24 @@ This project has **two separate Python environments** — never mix their conven
 
 **Running tests:**
 ```bash
-uv run pytest          # all 24 unit tests (no Ableton required)
+uv run pytest          # all 30 unit tests (no Ableton required)
 uv run pytest -v       # verbose output
 ```
 Unit tests cover: M4L patch generator math and structure, MCP server tool routing, Remote Script method logic. Integration tests (live Ableton session) are not automated — test manually with a real session.
+
+## Continuous Improvement
+
+When a mixing or mastering session reveals something new and specific to this project — a confirmed device URI, an EQ Eight parameter index that maps to a named band, a plugin parameter name that turned out to be cryptic, a workflow step that needed adjusting — update the relevant section of `CLAUDE.md` immediately without being asked.
+
+Things worth capturing:
+- Confirmed URIs for instruments and effects (add to the Browser & URIs section)
+- Third-party plugin parameter maps discovered during a session (add to Key Devices)
+- Workflow steps that consistently need adjustment (refine the CC Mixing/Mastering Session sections)
+- Track configurations that work well for specific genres or roles
+
+Things not worth capturing (already handled by git or derivable from code):
+- General programming patterns — those go in the user-level `~/.claude/CLAUDE.md`
+- One-off session decisions that don't generalize
 
 ---
 
@@ -150,7 +164,7 @@ Always add these devices in this order after the instrument/sound source:
 2. **Utility** — gain staging, width control, mono check (flip phase to check compatibility)
 3. **Spectrum** — visual frequency reference for CC analysis sessions
 
-Add **AbletonMCP Analyzer** (Max4Live) after Spectrum once installed — see Frequency Analysis (Phase 2) below.
+Add **AbletonMCP Analyzer** (Max4Live) after Spectrum — use `load_analyzer_device(track_index)` to install it, or run `install.py` to add it to your User Library first.
 
 ## Mixing Philosophy (Bobby Owsinski)
 

@@ -102,7 +102,7 @@ class AbletonConnection:
         
         # Check if this is a state-modifying command
         is_modifying_command = command_type in [
-            "create_midi_track", "create_audio_track", "set_track_name",
+            "create_midi_track", "set_track_name",
             "create_clip", "add_notes_to_clip", "set_clip_name",
             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
             "start_playback", "stop_playback", "load_instrument_or_effect",
