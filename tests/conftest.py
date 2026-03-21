@@ -113,9 +113,16 @@ def mock_song():
     return_device = _make_device("Reverb", "Reverb", return_params)
     return_track = _make_track("Reverb A", left=0.2, right=0.2, devices=[return_device])
 
+    master_params = [
+        _make_param("Gain", 0.0, -70.0, 6.0),
+        _make_param("Volume", 1.0, 0.0, 1.0),
+    ]
+    master_device = _make_device("Glue Compressor", "GlueCompressor", master_params)
+
     master = MagicMock()
     master.output_meter_left = 0.7
     master.output_meter_right = 0.75
+    master.devices = [master_device]
 
     song = MagicMock()
     song.tracks = [track0, track1]

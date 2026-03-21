@@ -740,12 +740,14 @@ class AbletonMCP(ControlSurface):
     
     
     def _load_browser_item(self, track_index, item_uri):
-        """Load a browser item onto a track by its URI"""
+        """Load a browser item onto a track by its URI. Use track_index=-1 for the master track."""
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
+            if track_index == -1:
+                track = self._song.master_track
+            elif track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
+            else:
+                track = self._song.tracks[track_index]
             
             # Access the application's browser instance instead of creating a new one
             app = self.application()
@@ -1135,12 +1137,14 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _get_device_parameters(self, track_index, device_index):
-        """Return all parameters for a device on a track."""
+        """Return all parameters for a device on a track. Use track_index=-1 for the master track."""
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
+            if track_index == -1:
+                track = self._song.master_track
+            elif track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
-
-            track = self._song.tracks[track_index]
+            else:
+                track = self._song.tracks[track_index]
 
             if device_index < 0 or device_index >= len(track.devices):
                 raise IndexError("Device index out of range")
@@ -1169,12 +1173,14 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _set_device_parameter(self, track_index, device_index, parameter_index, value):
-        """Set a parameter value on a device."""
+        """Set a parameter value on a device. Use track_index=-1 for the master track."""
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
+            if track_index == -1:
+                track = self._song.master_track
+            elif track_index < 0 or track_index >= len(self._song.tracks):
                 raise IndexError("Track index out of range")
-
-            track = self._song.tracks[track_index]
+            else:
+                track = self._song.tracks[track_index]
 
             if device_index < 0 or device_index >= len(track.devices):
                 raise IndexError("Device index out of range")

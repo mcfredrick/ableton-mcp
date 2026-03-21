@@ -60,6 +60,19 @@ def test_set_device_parameter_invalid_index_raises(ableton_script):
         ableton_script._set_device_parameter(0, 0, 999, 1.0)
 
 
+def test_get_device_parameters_master_track(ableton_script, mock_song):
+    result = ableton_script._get_device_parameters(-1, 0)
+    assert result["device_name"] == mock_song.master_track.devices[0].name
+    assert result["class_name"] == mock_song.master_track.devices[0].class_name
+    assert "parameters" in result
+
+
+def test_set_device_parameter_master_track(ableton_script, mock_song):
+    param = mock_song.master_track.devices[0].parameters[0]
+    ableton_script._set_device_parameter(-1, 0, 0, 55.0)
+    assert param.value == 55.0
+
+
 def test_load_analyzer_device_raises_when_not_in_browser(ableton_script):
     with pytest.raises(RuntimeError, match="AbletonMCP Analyzer not found"):
         ableton_script.get_browser_items_at_path = lambda path: {"items": []}

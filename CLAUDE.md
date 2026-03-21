@@ -388,14 +388,16 @@ get_track_levels()
 
 Flag any track with `output_meter_peak > 0.89` (~−1 dBFS) as too hot. Target: peaks at −10 to −6 dBFS during performance (roughly 0.32–0.50).
 
-### Step 2 — Device inventory
+### Step 2 — Device inventory and analyzer setup
 
 For each track, call `get_track_info(track_index)` and check the `devices` list. Confirm:
 - EQ Eight present (class_name `Eq8`)
 - Compressor or Glue Compressor present
 - Utility present
 - Spectrum present
-- AbletonMCP Analyzer present (last in chain)
+- AbletonMCP Analyzer present (last in chain, class_name contains `MaxDevice` or name contains `AbletonMCP`)
+
+**For any track missing the AbletonMCP Analyzer, call `load_analyzer_device(track_index)` immediately** — do not wait to be asked. Load it on all tracks before proceeding to the frequency map step.
 
 Note device indices for use in subsequent steps.
 
@@ -441,4 +443,100 @@ Use `set_device_parameter` to apply each agreed EQ move. Read `get_device_parame
 ### Step 8 — Verify and sign off
 
 Re-run `get_track_levels` and `get_device_parameters` on each M4L Analyzer to confirm improvement. Run the Mastering Prep Checklist before export.
+
+## CC Mastering Session
+
+A data-driven mastering session uses the AbletonMCP Analyzer on both the mix and a reference track to make spectral comparisons measurable rather than subjective. The reference track is the key best practice: always master toward a target, not in the abstract.
+
+### Prerequisites
+
+- Mix is complete (mixing session signed off, or working from a rendered stereo file on an audio track)
+- A reference track is ready — a commercial release in the same genre that represents the target sound
+- Master track is visible in the session
+
+### Standard mastering chain (load on master track in this order)
+
+Load these devices on the master track using `load_instrument_or_effect` with the appropriate URIs, then `load_analyzer_device(track_index=-1)` last:
+
+1. **EQ Eight** — broad tonal correction, high-shelf air boost, low-shelf sub control
+2. **Multiband Dynamics** — band-level compression for control without coloring the whole signal
+3. **Glue Compressor** — glue and gentle loudness, 1–2 dB GR max
+4. **Limiter** — hard ceiling at −0.3 dBTP, lookahead enabled
+5. **AbletonMCP Analyzer** — post-chain measurement
+
+### Step 1 — Set up mastering chain
+
+Load the chain on the master track (track_index=-1). Read current devices via `get_track_info` on the master track first — if any are already present, skip loading them.
+
+### Step 2 — Set up reference track
+
+1. Create a new audio track, name it "Reference"
+2. Ask the user to drop their reference track audio file onto the first clip slot
+3. Load AbletonMCP Analyzer on the reference track
+4. Mute the reference track (it's for measurement only, not playback in the master chain)
+
+### Step 3 — Match loudness (pre-comparison)
+
+Loudness matching must happen before spectral comparison — otherwise you are comparing levels, not tone.
+
+1. Solo and play the reference track; read its peak via `get_track_levels`
+2. Un-solo; play the mix; read its peak
+3. If the mix is more than 2 dB louder than the reference, reduce the master Utility gain (or mix fader) to match. If quieter, increase it.
+4. The goal is matched *perceived* loudness. Since Live does not expose LUFS, use peak meters as a proxy and trust your ears to confirm.
+
+### Step 4 — Build frequency profiles
+
+With levels matched, play both tracks and read their M4L Analyzer parameters. Build a comparison table:
+
+```
+Band    | Reference | Mix   | Delta
+--------|-----------|-------|-------
+Sub     | −22 dB    | −25   | −3 (mix light)
+Low     | −14 dB    | −11   | +3 (mix heavy)
+LoMid   | −18 dB    | −22   | −4 (mix thin)
+Mid     | −16 dB    | −18   | −2 (within tolerance)
+HiMid   | −12 dB    | −8    | +4 (mix harsh)
+Hi      | −20 dB    | −24   | −4 (mix dull)
+```
+
+### Step 5 — Apply EQ corrections on master
+
+For each band where the delta exceeds 2 dB, apply a correction to master EQ Eight. Mastering EQ is gentle — use wide Q (0.5–1.0), move in 1–2 dB increments:
+
+| Delta | Direction | Action |
+|-------|-----------|--------|
+| Mix heavy (+3 dB Low) | Cut | −3 dB around 110 Hz, Q 0.7 |
+| Mix light (−4 dB LoMid) | Boost | +3 dB around 316 Hz, Q 0.7 (leave 1 dB headroom) |
+| Mix harsh (+4 dB HiMid) | Cut | −3 dB around 4 kHz, Q 0.7 |
+| Mix dull (−4 dB Hi) | Boost | +3 dB shelf above 10 kHz |
+
+Use `set_device_parameter` to apply. Always read current parameter values first with `get_device_parameters` to confirm band frequencies and indices.
+
+### Step 6 — Set dynamics
+
+Read current Glue Compressor and Limiter parameters via `get_device_parameters`, then set:
+
+**Glue Compressor:**
+- Ratio: 2:1
+- Attack: 30 ms (slow — preserve transients)
+- Release: 200 ms
+- Threshold: adjust until GR reads 1–2 dB during loud passages
+
+**Limiter:**
+- Ceiling: −0.3 dBTP
+- Lookahead: on (if available as a parameter)
+
+### Step 7 — Verify
+
+1. Re-read AbletonMCP Analyzer on master and reference — confirm all band deltas are within 2 dB
+2. Re-read `get_track_levels` — confirm master peak ≤ ~0.97 (−0.3 dBFS)
+3. Mono check: set master Utility width to 0 momentarily, confirm key elements survive, restore width
+
+### Mastering sign-off checklist
+
+- [ ] All band levels within 2 dB of reference
+- [ ] Peak output ≤ −0.3 dBFS on master
+- [ ] Glue Compressor GR ≤ 3 dB (no over-compression)
+- [ ] Mono compatibility confirmed
+- [ ] Reference track muted/deleted before export
 

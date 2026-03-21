@@ -626,7 +626,7 @@ def get_device_parameters(ctx: Context, track_index: int, device_index: int) -> 
     Get all parameters for a device on a track.
 
     Parameters:
-    - track_index: The index of the track
+    - track_index: The index of the track. Use -1 to target the master track.
     - device_index: The index of the device on that track
 
     Returns each parameter's index, name, current value, min, max, and whether it is quantized.
@@ -656,7 +656,7 @@ def set_device_parameter(
     Set a parameter value on a device.
 
     Parameters:
-    - track_index: The index of the track
+    - track_index: The index of the track. Use -1 to target the master track.
     - device_index: The index of the device on that track
     - parameter_index: The index of the parameter (from get_device_parameters)
     - value: The new value (must be within the parameter's min/max range)
@@ -685,7 +685,7 @@ def load_analyzer_device(ctx: Context, track_index: int) -> str:
     device index after loading, then get_device_parameters to read band levels.
 
     Parameters:
-    - track_index: The index of the track to load the analyzer on
+    - track_index: The index of the track to load the analyzer on. Use -1 to target the master track.
     """
     try:
         ableton = get_ableton_connection()
