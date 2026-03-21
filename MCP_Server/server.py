@@ -107,6 +107,9 @@ class AbletonConnection:
             "set_tempo", "fire_clip", "stop_clip", "set_device_parameter",
             "start_playback", "stop_playback", "load_instrument_or_effect",
             "load_analyzer_device", "load_browser_item",
+            "set_track_volume", "set_track_pan", "set_track_mute",
+            "set_track_solo", "set_track_arm", "toggle_device",
+            "create_scene", "fire_scene", "set_scene_name",
         ]
         
         try:
@@ -694,6 +697,225 @@ def load_analyzer_device(ctx: Context, track_index: int) -> str:
     except Exception as e:
         logger.error(f"Error loading analyzer device: {str(e)}")
         return f"Error loading analyzer device: {str(e)}"
+
+
+@mcp.tool()
+def get_track_volumes(ctx: Context) -> str:
+    """Get volume, pan, mute, solo, and arm state for all tracks, return tracks, and master."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_track_volumes")
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting track volumes: {str(e)}")
+        return f"Error getting track volumes: {str(e)}"
+
+
+@mcp.tool()
+def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
+    """
+    Set the volume of a track. Use track_index=-1 for master.
+    Volume range: 0.0 (silence) to 1.0 (unity gain, 0 dB). Values above 1.0 boost up to +6 dB.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_track_volume", {"track_index": track_index, "volume": volume})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting track volume: {str(e)}")
+        return f"Error setting track volume: {str(e)}"
+
+
+@mcp.tool()
+def set_track_pan(ctx: Context, track_index: int, pan: float) -> str:
+    """
+    Set the panning of a track. Use track_index=-1 for master.
+    Pan range: -1.0 (full left) to 1.0 (full right). 0.0 is center.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_track_pan", {"track_index": track_index, "pan": pan})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting track pan: {str(e)}")
+        return f"Error setting track pan: {str(e)}"
+
+
+@mcp.tool()
+def set_track_mute(ctx: Context, track_index: int, muted: bool) -> str:
+    """Mute or unmute a track. muted=True silences the track."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_track_mute", {"track_index": track_index, "muted": muted})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting track mute: {str(e)}")
+        return f"Error setting track mute: {str(e)}"
+
+
+@mcp.tool()
+def set_track_solo(ctx: Context, track_index: int, soloed: bool) -> str:
+    """Solo or unsolo a track."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_track_solo", {"track_index": track_index, "soloed": soloed})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting track solo: {str(e)}")
+        return f"Error setting track solo: {str(e)}"
+
+
+@mcp.tool()
+def set_track_arm(ctx: Context, track_index: int, armed: bool) -> str:
+    """Arm or disarm a track for recording. Only valid on tracks that can be armed."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_track_arm", {"track_index": track_index, "armed": armed})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting track arm: {str(e)}")
+        return f"Error setting track arm: {str(e)}"
+
+
+@mcp.tool()
+def toggle_device(ctx: Context, track_index: int, device_index: int, enabled: bool) -> str:
+    """
+    Enable or bypass a device on a track. Use track_index=-1 for master.
+    enabled=True turns the device on; enabled=False bypasses it.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("toggle_device", {
+            "track_index": track_index,
+            "device_index": device_index,
+            "enabled": enabled,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error toggling device: {str(e)}")
+        return f"Error toggling device: {str(e)}"
+
+
+@mcp.tool()
+def get_clip_notes(ctx: Context, track_index: int, clip_index: int) -> str:
+    """
+    Read all MIDI notes from a clip.
+    Returns pitch, start_time, duration, velocity, and mute for each note.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_clip_notes", {
+            "track_index": track_index,
+            "clip_index": clip_index,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting clip notes: {str(e)}")
+        return f"Error getting clip notes: {str(e)}"
+
+
+@mcp.tool()
+def create_scene(ctx: Context, index: int = -1) -> str:
+    """Create a new scene. index=-1 appends at the end."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("create_scene", {"index": index})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error creating scene: {str(e)}")
+        return f"Error creating scene: {str(e)}"
+
+
+@mcp.tool()
+def fire_scene(ctx: Context, scene_index: int) -> str:
+    """Launch all clips in a scene."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("fire_scene", {"scene_index": scene_index})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error firing scene: {str(e)}")
+        return f"Error firing scene: {str(e)}"
+
+
+@mcp.tool()
+def set_scene_name(ctx: Context, scene_index: int, name: str) -> str:
+    """Set the name of a scene."""
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_scene_name", {"scene_index": scene_index, "name": name})
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting scene name: {str(e)}")
+        return f"Error setting scene name: {str(e)}"
+
+
+@mcp.tool()
+def capture_session_snapshot(ctx: Context, label: str = "") -> str:
+    """
+    Capture a full snapshot of the session state: track levels, volumes, pans,
+    mute/solo states, and all device parameters. Saves to sessions/ directory.
+
+    Call this at the start of a mixing or mastering session to create a benchmark.
+    After the session, the snapshot shows exactly what changed.
+
+    Parameters:
+    - label: optional label to include in the filename (e.g., "pre-mix", "pre-master")
+    """
+    import os
+    from datetime import datetime
+
+    try:
+        ableton = get_ableton_connection()
+
+        session_info = ableton.send_command("get_session_info")
+        levels = ableton.send_command("get_track_levels")
+        volumes = ableton.send_command("get_track_volumes")
+        track_count = session_info.get("track_count", 0)
+
+        tracks_snapshot = []
+        for i in range(track_count):
+            track_info = ableton.send_command("get_track_info", {"track_index": i})
+            devices_snapshot = []
+            for device in track_info.get("devices", []):
+                try:
+                    params = ableton.send_command("get_device_parameters", {
+                        "track_index": i,
+                        "device_index": device["index"],
+                    })
+                    devices_snapshot.append(params)
+                except Exception:
+                    devices_snapshot.append({"device_index": device["index"], "error": "could not read"})
+            tracks_snapshot.append({
+                "index": i,
+                "name": track_info.get("name"),
+                "devices": devices_snapshot,
+            })
+
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        suffix = f"-{label}" if label else ""
+        filename = f"snapshot-{timestamp}{suffix}.json"
+
+        sessions_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "sessions")
+        os.makedirs(sessions_dir, exist_ok=True)
+        filepath = os.path.join(sessions_dir, filename)
+
+        snapshot = {
+            "timestamp": timestamp,
+            "label": label,
+            "session_info": session_info,
+            "levels": levels,
+            "volumes": volumes,
+            "tracks": tracks_snapshot,
+        }
+
+        with open(filepath, "w") as f:
+            json.dump(snapshot, f, indent=2)
+
+        return f"Snapshot saved: {filepath} ({track_count} tracks, {sum(len(t['devices']) for t in tracks_snapshot)} devices)"
+    except Exception as e:
+        logger.error(f"Error capturing session snapshot: {str(e)}")
+        return f"Error capturing session snapshot: {str(e)}"
 
 
 @mcp.tool()

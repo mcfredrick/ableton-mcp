@@ -512,6 +512,8 @@ A data-driven mastering session uses the AbletonMCP Analyzer on both the mix and
 - A reference track is ready — a commercial release in the same genre that represents the target sound
 - Master track is visible in the session
 
+**Note on audio export:** Ableton's Live API does not expose file export. For an audio reference of the pre-mix/pre-master state, export manually once via File → Export Audio/Video before starting. CC uses `capture_session_snapshot` as a quantitative benchmark instead.
+
 ### Standard mastering chain (load on master track in this order)
 
 Load these devices on the master track using `load_instrument_or_effect` with the appropriate URIs, then `load_analyzer_device(track_index=-1)` last:

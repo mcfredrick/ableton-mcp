@@ -231,12 +231,21 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 device_index = params.get("device_index", 0)
                 response["result"] = self._get_device_parameters(track_index, device_index)
+            elif command_type == "get_track_volumes":
+                response["result"] = self._get_track_volumes()
+            elif command_type == "get_clip_notes":
+                track_index = params.get("track_index", 0)
+                clip_index = params.get("clip_index", 0)
+                response["result"] = self._get_clip_notes(track_index, clip_index)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
                                  "set_tempo", "fire_clip", "stop_clip",
                                  "start_playback", "stop_playback", "load_browser_item",
-                                 "set_device_parameter", "load_analyzer_device"]:
+                                 "set_device_parameter", "load_analyzer_device",
+                                 "set_track_volume", "set_track_pan", "set_track_mute",
+                                 "set_track_solo", "set_track_arm", "toggle_device",
+                                 "create_scene", "fire_scene", "set_scene_name"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -294,6 +303,41 @@ class AbletonMCP(ControlSurface):
                         elif command_type == "load_analyzer_device":
                             track_index = params.get("track_index", 0)
                             result = self._load_analyzer_device(track_index)
+                        elif command_type == "set_track_volume":
+                            track_index = params.get("track_index", 0)
+                            volume = params.get("volume", 0.0)
+                            result = self._set_track_volume(track_index, volume)
+                        elif command_type == "set_track_pan":
+                            track_index = params.get("track_index", 0)
+                            pan = params.get("pan", 0.0)
+                            result = self._set_track_pan(track_index, pan)
+                        elif command_type == "set_track_mute":
+                            track_index = params.get("track_index", 0)
+                            muted = params.get("muted", False)
+                            result = self._set_track_mute(track_index, muted)
+                        elif command_type == "set_track_solo":
+                            track_index = params.get("track_index", 0)
+                            soloed = params.get("soloed", False)
+                            result = self._set_track_solo(track_index, soloed)
+                        elif command_type == "set_track_arm":
+                            track_index = params.get("track_index", 0)
+                            armed = params.get("armed", False)
+                            result = self._set_track_arm(track_index, armed)
+                        elif command_type == "toggle_device":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            enabled = params.get("enabled", True)
+                            result = self._toggle_device(track_index, device_index, enabled)
+                        elif command_type == "create_scene":
+                            index = params.get("index", -1)
+                            result = self._create_scene(index)
+                        elif command_type == "fire_scene":
+                            scene_index = params.get("scene_index", 0)
+                            result = self._fire_scene(scene_index)
+                        elif command_type == "set_scene_name":
+                            scene_index = params.get("scene_index", 0)
+                            name = params.get("name", "")
+                            result = self._set_scene_name(scene_index, name)
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -1101,3 +1145,135 @@ class AbletonMCP(ControlSurface):
         except Exception as e:
             self.log_message("Error setting device parameter: " + str(e))
             raise
+
+    def _get_track_volumes(self):
+        """Return volume and pan for all tracks, return tracks, and master."""
+        tracks = []
+        for i, track in enumerate(self._song.tracks):
+            tracks.append({
+                "index": i,
+                "name": track.name,
+                "volume": track.mixer_device.volume.value,
+                "pan": track.mixer_device.panning.value,
+                "mute": track.mute,
+                "solo": track.solo,
+                "arm": track.arm if track.can_be_armed else None,
+            })
+        return_tracks = []
+        for i, track in enumerate(self._song.return_tracks):
+            return_tracks.append({
+                "index": i,
+                "name": track.name,
+                "volume": track.mixer_device.volume.value,
+                "pan": track.mixer_device.panning.value,
+            })
+        master = self._song.master_track
+        return {
+            "tracks": tracks,
+            "return_tracks": return_tracks,
+            "master": {
+                "volume": master.mixer_device.volume.value,
+                "pan": master.mixer_device.panning.value,
+            },
+        }
+
+    def _set_track_volume(self, track_index, volume):
+        if track_index == -1:
+            track = self._song.master_track
+        elif 0 <= track_index < len(self._song.tracks):
+            track = self._song.tracks[track_index]
+        else:
+            raise IndexError("Track index out of range")
+        track.mixer_device.volume.value = volume
+        return {"track_index": track_index, "volume": track.mixer_device.volume.value}
+
+    def _set_track_pan(self, track_index, pan):
+        if track_index == -1:
+            track = self._song.master_track
+        elif 0 <= track_index < len(self._song.tracks):
+            track = self._song.tracks[track_index]
+        else:
+            raise IndexError("Track index out of range")
+        track.mixer_device.panning.value = pan
+        return {"track_index": track_index, "pan": track.mixer_device.panning.value}
+
+    def _set_track_mute(self, track_index, muted):
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        self._song.tracks[track_index].mute = muted
+        return {"track_index": track_index, "mute": self._song.tracks[track_index].mute}
+
+    def _set_track_solo(self, track_index, soloed):
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        self._song.tracks[track_index].solo = soloed
+        return {"track_index": track_index, "solo": self._song.tracks[track_index].solo}
+
+    def _set_track_arm(self, track_index, armed):
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        track = self._song.tracks[track_index]
+        if not track.can_be_armed:
+            raise RuntimeError("Track cannot be armed")
+        track.arm = armed
+        return {"track_index": track_index, "arm": track.arm}
+
+    def _toggle_device(self, track_index, device_index, enabled):
+        if track_index == -1:
+            track = self._song.master_track
+        elif 0 <= track_index < len(self._song.tracks):
+            track = self._song.tracks[track_index]
+        else:
+            raise IndexError("Track index out of range")
+        if device_index < 0 or device_index >= len(track.devices):
+            raise IndexError("Device index out of range")
+        track.devices[device_index].parameters[0].value = 1.0 if enabled else 0.0
+        return {"track_index": track_index, "device_index": device_index, "enabled": enabled}
+
+    def _get_clip_notes(self, track_index, clip_index):
+        if track_index < 0 or track_index >= len(self._song.tracks):
+            raise IndexError("Track index out of range")
+        track = self._song.tracks[track_index]
+        if clip_index < 0 or clip_index >= len(track.clip_slots):
+            raise IndexError("Clip index out of range")
+        slot = track.clip_slots[clip_index]
+        if not slot.has_clip:
+            raise RuntimeError("No clip in slot")
+        clip = slot.clip
+        if not clip.is_midi_clip:
+            raise RuntimeError("Clip is not a MIDI clip")
+        notes = []
+        for note in clip.get_notes(0, 0, clip.length, 128):
+            notes.append({
+                "pitch": note[0],
+                "start_time": note[1],
+                "duration": note[2],
+                "velocity": note[3],
+                "mute": note[4],
+            })
+        return {
+            "track_index": track_index,
+            "clip_index": clip_index,
+            "clip_name": clip.name,
+            "length": clip.length,
+            "notes": notes,
+        }
+
+    def _create_scene(self, index):
+        """Create a new scene at the given index (-1 = end)."""
+        self._song.create_scene(index)
+        scene_index = len(self._song.scenes) - 1 if index == -1 else index
+        scene = self._song.scenes[scene_index]
+        return {"index": scene_index, "name": scene.name}
+
+    def _fire_scene(self, scene_index):
+        if scene_index < 0 or scene_index >= len(self._song.scenes):
+            raise IndexError("Scene index out of range")
+        self._song.scenes[scene_index].fire()
+        return {"fired": True, "scene_index": scene_index}
+
+    def _set_scene_name(self, scene_index, name):
+        if scene_index < 0 or scene_index >= len(self._song.scenes):
+            raise IndexError("Scene index out of range")
+        self._song.scenes[scene_index].name = name
+        return {"scene_index": scene_index, "name": self._song.scenes[scene_index].name}

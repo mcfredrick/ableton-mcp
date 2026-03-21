@@ -84,12 +84,28 @@ def _make_device(name, class_name, params):
     return d
 
 
+def _make_mixer_device(volume=0.85, pan=0.0):
+    volume_param = MagicMock()
+    volume_param.value = volume
+    pan_param = MagicMock()
+    pan_param.value = pan
+    md = MagicMock()
+    md.volume = volume_param
+    md.panning = pan_param
+    return md
+
+
 def _make_track(name, left=0.5, right=0.6, devices=None):
     t = MagicMock()
     t.name = name
     t.output_meter_left = left
     t.output_meter_right = right
     t.devices = devices or []
+    t.mixer_device = _make_mixer_device()
+    t.mute = False
+    t.solo = False
+    t.arm = False
+    t.can_be_armed = True
     return t
 
 
@@ -123,11 +139,18 @@ def mock_song():
     master.output_meter_left = 0.7
     master.output_meter_right = 0.75
     master.devices = [master_device]
+    master.mixer_device = _make_mixer_device(volume=0.9, pan=0.0)
+
+    return_track.mixer_device = _make_mixer_device(volume=0.7, pan=0.1)
+
+    mock_scene = MagicMock()
+    mock_scene.name = "Scene 1"
 
     song = MagicMock()
     song.tracks = [track0, track1]
     song.return_tracks = [return_track]
     song.master_track = master
+    song.scenes = [mock_scene]
     return song
 
 

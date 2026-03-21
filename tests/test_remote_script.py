@@ -90,3 +90,57 @@ def test_load_analyzer_device_loads_correct_uri(ableton_script):
         result = ableton_script._load_analyzer_device(0)
         mock_load.assert_called_once_with(0, items[0]["uri"])
         assert result["device_name"] == "AbletonMCP Analyzer"
+
+
+def test_get_track_volumes_returns_required_keys(ableton_script):
+    result = ableton_script._get_track_volumes()
+    assert "tracks" in result
+    assert "return_tracks" in result
+    assert "master" in result
+
+
+def test_get_track_volumes_track_has_mixer_fields(ableton_script, mock_song):
+    result = ableton_script._get_track_volumes()
+    track = result["tracks"][0]
+    assert "volume" in track
+    assert "pan" in track
+    assert "mute" in track
+    assert "solo" in track
+    assert "arm" in track
+
+
+def test_set_track_volume_sets_value(ableton_script, mock_song):
+    ableton_script._set_track_volume(0, 0.75)
+    assert mock_song.tracks[0].mixer_device.volume.value == 0.75
+
+
+def test_set_track_mute_sets_mute(ableton_script, mock_song):
+    ableton_script._set_track_mute(0, True)
+    assert mock_song.tracks[0].mute is True
+
+
+def test_set_track_arm_raises_when_cannot_be_armed(ableton_script, mock_song):
+    mock_song.tracks[0].can_be_armed = False
+    with pytest.raises(RuntimeError, match="cannot be armed"):
+        ableton_script._set_track_arm(0, True)
+
+
+def test_get_clip_notes_returns_notes(ableton_script, mock_song):
+    from unittest.mock import MagicMock
+    slot = MagicMock()
+    slot.has_clip = True
+    clip = MagicMock()
+    clip.is_midi_clip = True
+    clip.name = "Pattern"
+    clip.length = 4.0
+    clip.get_notes.return_value = [
+        (60, 0.0, 0.5, 100, False),
+        (64, 0.5, 0.5, 90, False),
+    ]
+    slot.clip = clip
+    mock_song.tracks[0].clip_slots = [slot]
+    result = ableton_script._get_clip_notes(0, 0)
+    assert "notes" in result
+    assert len(result["notes"]) == 2
+    assert result["notes"][0]["pitch"] == 60
+    assert result["length"] == 4.0
