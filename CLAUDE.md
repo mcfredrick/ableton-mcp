@@ -382,6 +382,59 @@ With Phase 1 in place, CC can verify the standard setup on any track:
 - Read Compressor threshold/ratio and flag over-compression (ratio > 8:1 is aggressive)
 - Read Utility width parameter — confirm bass/kick are mono (width = 0)
 
+### `get_track_volumes`
+
+No parameters. Returns volume (0.0–1.0), pan (−1.0 to 1.0), mute, solo, and arm state for every track and return track.
+
+```json
+{
+  "tracks": [
+    { "index": 0, "name": "Bass", "volume": 0.85, "pan": 0.0, "mute": false, "solo": false, "arm": false }
+  ],
+  "return_tracks": [...]
+}
+```
+
+### `set_track_volume`
+
+Parameters: `track_index`, `value` (0.0–1.0, where 0.85 ≈ 0 dB). Use `track_index=-1` for the master track.
+
+### `set_track_pan`
+
+Parameters: `track_index`, `value` (−1.0 = full left, 0.0 = center, 1.0 = full right).
+
+### `set_track_mute`
+
+Parameters: `track_index`, `mute` (bool). Mutes or unmutes the track.
+
+### `set_track_solo`
+
+Parameters: `track_index`, `solo` (bool). Solos or un-solos the track.
+
+### `set_track_arm`
+
+Parameters: `track_index`, `arm` (bool). Arms or disarms a track for recording. Only works on tracks that can be armed (MIDI and audio tracks, not return or master).
+
+### `toggle_device`
+
+Parameters: `track_index`, `device_index`, `enabled` (bool). Bypasses or enables a device. Uses the device's on/off parameter (index 0 in Live's device API). Use to A/B test a device without removing it from the chain.
+
+### `get_clip_notes`
+
+Parameters: `track_index`, `clip_index`. Returns all MIDI notes in the clip as a list of `{pitch, start_time, duration, velocity, mute}` objects. Useful for reading existing MIDI content before editing.
+
+### Scene Management
+
+**`create_scene`** — No required parameters (optional `name`). Creates a new scene at the end of the scene list and returns its index.
+
+**`fire_scene`** — Parameters: `scene_index`. Fires all clips in the scene simultaneously.
+
+**`set_scene_name`** — Parameters: `scene_index`, `name`. Renames a scene.
+
+### `capture_session_snapshot`
+
+Parameters: `label` (optional string). Reads all track levels, volumes, mixer state, and device parameters across the entire session and writes them to `sessions/snapshot-{timestamp}-{label}.json`. Use at the start of mixing and mastering sessions as a quantitative before/after benchmark.
+
 ---
 
 ## Frequency Analysis (Phase 2)
