@@ -119,12 +119,20 @@ Then **fully restart Ableton Live** — control surface reload (None → Ableton
 
 `osascript` requires Accessibility permissions (not granted to terminal) — use `pkill` and `open` instead:
 
+**Note:** `tell application "Live" to quit saving no` does NOT reliably suppress the save dialog — Live always shows it. Dismiss it immediately with Cmd+D (Don't Save) after sending the quit command.
+
 ```python
 import subprocess, time, socket, json
 
-# Quit gracefully to avoid crash-recovery dialog on next launch
+# Send quit command — save dialog will still appear
 subprocess.run(['osascript', '-e', 'tell application "Live" to quit saving no'])
-time.sleep(4)
+time.sleep(1)
+# Bring Live to front so the dialog can receive keystrokes
+subprocess.run(['osascript', '-e', 'tell application "System Events" \n set liveProc to first process whose name contains "Live" \n set frontmost of liveProc to true \n end tell'])
+time.sleep(0.5)
+# Dismiss save dialog with Cmd+D (Don't Save)
+subprocess.run(['osascript', '-e', 'tell application "System Events" \n keystroke "d" using command down \n end tell'])
+time.sleep(3)
 # Force-kill if still running
 subprocess.run(['pkill', '-f', 'Ableton Live'])
 time.sleep(4)
@@ -432,6 +440,8 @@ Note: meter values are instantaneous snapshots — call during playback for mean
 Always use this to set `--duration` when running `sample_levels.py`. Use `arrangement_length_seconds + 10` as the duration to ensure the full song is captured.
 Values above ~0.89 (approx –1 dBFS) on any track indicate a hot signal that needs gain staging.
 
+**Group track gain staging**: reduce only the GROUP fader (`set_track_volume` on the group track index), leave child track faders at unity (0.85). Reducing both doubles the attenuation. To compute: `new_vol = 0.85 * 10**(-db_reduction / 20.0)`. Example: -10 dB → `0.85 * 10**(-10/20) = 0.269`.
+
 ### `get_device_parameters`
 
 Parameters: `track_index`, `device_index`
@@ -491,11 +501,13 @@ No parameters. Returns volume (0.0–1.0), pan (−1.0 to 1.0), mute, solo, and 
 
 ### `set_track_volume`
 
-Parameters: `track_index`, `value` (0.0–1.0, where 0.85 ≈ 0 dB). Works on all track types including master and return tracks.
+Parameters: `track_index`, `volume` (0.0–1.0, where 0.85 ≈ 0 dB). Works on all track types including master and return tracks.
+
+**Direct socket key is `"volume"`, not `"value"`.** Using `"value"` silently sets volume to 0.0 (the default), killing the track.
 
 ### `set_track_pan`
 
-Parameters: `track_index`, `value` (−1.0 = full left, 0.0 = center, 1.0 = full right). Works on all track types including master and return tracks.
+Parameters: `track_index`, `pan` (−1.0 = full left, 0.0 = center, 1.0 = full right). Works on all track types including master and return tracks.
 
 ### `set_track_mute`
 
