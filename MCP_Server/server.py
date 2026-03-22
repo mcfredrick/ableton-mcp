@@ -110,6 +110,7 @@ class AbletonConnection:
             "set_track_volume", "set_track_pan", "set_track_mute",
             "set_track_solo", "set_track_arm", "toggle_device",
             "create_scene", "fire_scene", "set_scene_name",
+            "set_rack_device_parameter",
         ]
         
         try:
@@ -276,9 +277,10 @@ def get_session_info(ctx: Context) -> str:
 def get_track_info(ctx: Context, track_index: int) -> str:
     """
     Get detailed information about a specific track in Ableton.
-    
-    Parameters:
-    - track_index: The index of the track to get information about
+
+    Track index convention: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
+    Master and return tracks omit clip_slots and arm. Master additionally omits mute and solo.
+    Response includes track_type ("audio", "midi", "group", "return", or "master") and is_group_track.
     """
     try:
         ableton = get_ableton_connection()
@@ -416,7 +418,7 @@ def load_instrument_or_effect(ctx: Context, track_index: int, uri: str) -> str:
     Load an instrument or effect onto a track using its URI.
     
     Parameters:
-    - track_index: The index of the track to load the instrument on
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     - uri: The URI of the instrument or effect to load (e.g., 'query:Synths#Instrument%20Rack:Bass:FileId_5116')
     """
     try:
@@ -629,7 +631,7 @@ def get_device_parameters(ctx: Context, track_index: int, device_index: int) -> 
     Get all parameters for a device on a track.
 
     Parameters:
-    - track_index: The index of the track. Use -1 to target the master track.
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     - device_index: The index of the device on that track
 
     Returns each parameter's index, name, current value, min, max, and whether it is quantized.
@@ -659,7 +661,7 @@ def set_device_parameter(
     Set a parameter value on a device.
 
     Parameters:
-    - track_index: The index of the track. Use -1 to target the master track.
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     - device_index: The index of the device on that track
     - parameter_index: The index of the parameter (from get_device_parameters)
     - value: The new value (must be within the parameter's min/max range)
@@ -688,7 +690,7 @@ def load_analyzer_device(ctx: Context, track_index: int) -> str:
     device index after loading, then get_device_parameters to read band levels.
 
     Parameters:
-    - track_index: The index of the track to load the analyzer on. Use -1 to target the master track.
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     """
     try:
         ableton = get_ableton_connection()
@@ -714,7 +716,8 @@ def get_track_volumes(ctx: Context) -> str:
 @mcp.tool()
 def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
     """
-    Set the volume of a track. Use track_index=-1 for master.
+    Set the volume of a track.
+    Track index convention: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     Volume range: 0.0 (silence) to 1.0 (unity gain, 0 dB). Values above 1.0 boost up to +6 dB.
     """
     try:
@@ -729,7 +732,8 @@ def set_track_volume(ctx: Context, track_index: int, volume: float) -> str:
 @mcp.tool()
 def set_track_pan(ctx: Context, track_index: int, pan: float) -> str:
     """
-    Set the panning of a track. Use track_index=-1 for master.
+    Set the panning of a track.
+    Track index convention: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     Pan range: -1.0 (full left) to 1.0 (full right). 0.0 is center.
     """
     try:
@@ -743,7 +747,7 @@ def set_track_pan(ctx: Context, track_index: int, pan: float) -> str:
 
 @mcp.tool()
 def set_track_mute(ctx: Context, track_index: int, muted: bool) -> str:
-    """Mute or unmute a track. muted=True silences the track."""
+    """Mute or unmute a track. muted=True silences the track. Supports regular, group, and return tracks (not master). Track index convention: 0+ = regular/group, -2 = return A, -3 = return B, etc."""
     try:
         ableton = get_ableton_connection()
         result = ableton.send_command("set_track_mute", {"track_index": track_index, "muted": muted})
@@ -755,7 +759,7 @@ def set_track_mute(ctx: Context, track_index: int, muted: bool) -> str:
 
 @mcp.tool()
 def set_track_solo(ctx: Context, track_index: int, soloed: bool) -> str:
-    """Solo or unsolo a track."""
+    """Solo or unsolo a track. Supports regular, group, and return tracks (not master). Track index convention: 0+ = regular/group, -2 = return A, -3 = return B, etc."""
     try:
         ableton = get_ableton_connection()
         result = ableton.send_command("set_track_solo", {"track_index": track_index, "soloed": soloed})
@@ -780,7 +784,8 @@ def set_track_arm(ctx: Context, track_index: int, armed: bool) -> str:
 @mcp.tool()
 def toggle_device(ctx: Context, track_index: int, device_index: int, enabled: bool) -> str:
     """
-    Enable or bypass a device on a track. Use track_index=-1 for master.
+    Enable or bypass a device on a track.
+    Track index convention: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     enabled=True turns the device on; enabled=False bypasses it.
     """
     try:
@@ -848,6 +853,72 @@ def set_scene_name(ctx: Context, scene_index: int, name: str) -> str:
     except Exception as e:
         logger.error(f"Error setting scene name: {str(e)}")
         return f"Error setting scene name: {str(e)}"
+
+
+@mcp.tool()
+def get_rack_devices(ctx: Context, track_index: int, device_index: int) -> str:
+    """
+    Get all chains and their sub-devices (with full parameter lists) for a rack device.
+
+    Use this to inspect instruments or effects racks that contain nested device chains,
+    such as a Rack wrapping FabFilter Pro-Q 3 or other plugins.
+
+    Parameters:
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
+    - device_index: The index of the rack device on that track.
+
+    Returns rack_name, and for each chain: its index, name, and list of devices with parameters.
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("get_rack_devices", {
+            "track_index": track_index,
+            "device_index": device_index,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error getting rack devices: {str(e)}")
+        return f"Error getting rack devices: {str(e)}"
+
+
+@mcp.tool()
+def set_rack_device_parameter(
+    ctx: Context,
+    track_index: int,
+    device_index: int,
+    chain_index: int,
+    chain_device_index: int,
+    parameter_index: int,
+    value: float,
+) -> str:
+    """
+    Set a parameter on a device nested inside a rack chain.
+
+    Use get_rack_devices first to discover chain_index, chain_device_index,
+    and parameter_index values.
+
+    Parameters:
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
+    - device_index: The index of the rack device on that track.
+    - chain_index: The index of the chain inside the rack.
+    - chain_device_index: The index of the device within that chain.
+    - parameter_index: The index of the parameter on that device.
+    - value: The new value (must be within the parameter's min/max range).
+    """
+    try:
+        ableton = get_ableton_connection()
+        result = ableton.send_command("set_rack_device_parameter", {
+            "track_index": track_index,
+            "device_index": device_index,
+            "chain_index": chain_index,
+            "chain_device_index": chain_device_index,
+            "parameter_index": parameter_index,
+            "value": value,
+        })
+        return json.dumps(result, indent=2)
+    except Exception as e:
+        logger.error(f"Error setting rack device parameter: {str(e)}")
+        return f"Error setting rack device parameter: {str(e)}"
 
 
 @mcp.tool()
@@ -927,12 +998,8 @@ def load_device_and_get_parameters(ctx: Context, track_index: int, item_uri: str
     After calling this, use set_device_parameter with the returned parameter indices to
     control the plugin. Use get_track_info to find the device index after loading.
 
-    Note: track_index must be a regular track (0-based index). This tool does not support
-    the master track (track_index=-1) because the master track is not in the tracks list
-    returned by get_track_info.
-
     Parameters:
-    - track_index: The index of the track to load the device on
+    - track_index: 0+ = regular/group tracks, -1 = master, -2 = return A, -3 = return B, etc.
     - item_uri: The browser URI of the device to load
 
     Returns the device name, class name, and full parameter list with indices, names,

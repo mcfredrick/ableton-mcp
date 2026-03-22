@@ -105,6 +105,59 @@ s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 s.connect(('localhost', 9877))
 ```
 
+## Updating the Remote Script
+
+After modifying `AbletonMCP_Remote_Script/__init__.py`, deploy and reload:
+
+```bash
+python3 install.py        # copies script to User Library and clears stale .pyc
+```
+
+Then **fully restart Ableton Live** — control surface reload (None → AbletonMCP in Preferences) does NOT work. Ableton caches the module in `sys.modules` and never re-reads from disk until a full quit-and-relaunch.
+
+### Restarting from the CLI
+
+`osascript` requires Accessibility permissions (not granted to terminal) — use `pkill` and `open` instead:
+
+```python
+import subprocess, time, socket, json
+
+# Quit gracefully to avoid crash-recovery dialog on next launch
+subprocess.run(['osascript', '-e', 'tell application "Live" to quit saving no'])
+time.sleep(4)
+# Force-kill if still running
+subprocess.run(['pkill', '-f', 'Ableton Live'])
+time.sleep(4)
+
+# Relaunch with a specific project
+subprocess.Popen(['open', '/path/to/Project.als'])
+
+# Poll until Remote Script is ready (~18–24s for large projects)
+for i in range(60):
+    time.sleep(3)
+    try:
+        s = socket.socket(); s.settimeout(3)
+        s.connect(('localhost', 9877))
+        s.sendall(json.dumps({'type': 'get_session_info', 'params': {}}).encode())
+        time.sleep(0.5); s.settimeout(5)
+        r = json.loads(s.recv(65536).decode())
+        if r.get('result', {}).get('track_count'):
+            print("Ready"); s.close(); break
+        s.close()
+    except: pass
+```
+
+**If the crash-recovery dialog appears** (caused by a prior force-kill without graceful quit), dismiss it by bringing Live to front and pressing Return:
+```bash
+osascript -e 'tell application "System Events" \n set liveProc to first process whose name contains "Live" \n set frontmost of liveProc to true \n end tell' ; osascript -e 'tell application "System Events" \n keystroke return \n end tell'
+```
+
+**Important:** On macOS, Ableton loads Remote Scripts from the **app bundle** first:
+```
+/Applications/Ableton Live 12 Suite.app/Contents/App-Resources/MIDI Remote Scripts/AbletonMCP/
+```
+The User Library path (`~/Music/Ableton/User Library/Remote Scripts/AbletonMCP/`) is ignored if an app-bundle copy exists. `install.py` now handles this automatically.
+
 ## Critical Workflow Rules
 
 - **Always capture the track index** returned by `create_midi_track` — never assume index 0. Existing projects may already have many tracks.
@@ -112,6 +165,7 @@ s.connect(('localhost', 9877))
 - **`get_session_info` may not reflect track counts accurately** — use `get_track_info` by index.
 - **Verify clips with `fire_clip`** after creation — `get_track_info` clips list is unreliable.
 - State-modifying commands need ~300–500ms recovery time.
+- **Unfold group tracks before loading devices**: children of collapsed groups are invisible in the Live API — `load_analyzer_device` (and other device commands) will return "The given Track is invisible". Call `set_track_fold(track_index, folded=False)` on all group tracks first.
 
 ## Browser & URIs
 
@@ -316,6 +370,38 @@ Drum Rack
 
 ---
 
+## Track Index Convention
+
+All tools that accept a `track_index` use this convention:
+
+| Value | Resolves to |
+|-------|-------------|
+| `0, 1, 2, ...` | Regular and group tracks (`song.tracks[i]`) |
+| `-1` | Master track |
+| `-2` | Return A (`song.return_tracks[0]`) |
+| `-3` | Return B (`song.return_tracks[1]`) |
+| `-4`, etc. | Subsequent return tracks |
+
+Use `get_session_info` to get the full track list with indices — return tracks are listed with their negative indices pre-computed so you never have to calculate them manually.
+
+**Track types** — `get_track_info` returns a `track_type` field and `is_group_track` flag:
+
+| `track_type` | `is_group_track` | Has `clip_slots` | Has `arm` | Has `mute`/`solo` |
+|---|---|---|---|---|
+| `"audio"` | false | yes | yes | yes |
+| `"midi"` | false | yes | yes | yes |
+| `"group"` | true | yes | no (unless can_be_armed) | yes |
+| `"return"` | false | no | no | yes |
+| `"master"` | false | no | no | no |
+
+**Rules:**
+- Never attempt clip operations (`create_clip`, `get_clip_notes`, etc.) on return or master tracks — they have no clip slots
+- Group tracks can hold devices and can be EQ'd, compressed, and analyzed like any other track
+- `set_track_mute` / `set_track_solo` work on regular, group, and return tracks — not master
+- `set_track_volume` / `set_track_pan` / `toggle_device` / `get_device_parameters` / `set_device_parameter` work on all track types including master and return
+
+---
+
 ## Reading Live Data (Phase 1)
 
 These MCP tools give CC real-time data from the session — not rule-of-thumb advice.
@@ -336,6 +422,14 @@ No parameters. Returns output meter levels (0.0–1.0) for every track, return t
 ```
 
 Note: meter values are instantaneous snapshots — call during playback for meaningful readings.
+
+### `get_session_info` — arrangement length
+
+`get_session_info` now returns:
+- `arrangement_length_beats` — total arrangement length in beats
+- `arrangement_length_seconds` — total length in seconds (beats / tempo × 60)
+
+Always use this to set `--duration` when running `sample_levels.py`. Use `arrangement_length_seconds + 10` as the duration to ensure the full song is captured.
 Values above ~0.89 (approx –1 dBFS) on any track indicate a hot signal that needs gain staging.
 
 ### `get_device_parameters`
@@ -368,8 +462,8 @@ Sets a device parameter to a new value. Always read parameters first to get the 
 
 To verify HPF settings across all tracks in one pass:
 
-1. `get_session_info` → get track count
-2. For each track: `get_track_info` → find device index of EQ Eight (class_name `Eq8`)
+1. `get_session_info` → get full track list with `track_type` and indices (including return tracks at negative indices)
+2. For each regular, group, and return track: `get_track_info` → find device index of EQ Eight (class_name `Eq8`)
 3. `get_device_parameters(track_index, eq_device_index)` → find the HPF band frequency parameter
 4. Compare against the standard cutoffs from the EQ Rules table
 5. Flag any track where HPF is missing or set too low; apply corrections via `set_device_parameter`
@@ -397,23 +491,27 @@ No parameters. Returns volume (0.0–1.0), pan (−1.0 to 1.0), mute, solo, and 
 
 ### `set_track_volume`
 
-Parameters: `track_index`, `value` (0.0–1.0, where 0.85 ≈ 0 dB). Use `track_index=-1` for the master track.
+Parameters: `track_index`, `value` (0.0–1.0, where 0.85 ≈ 0 dB). Works on all track types including master and return tracks.
 
 ### `set_track_pan`
 
-Parameters: `track_index`, `value` (−1.0 = full left, 0.0 = center, 1.0 = full right).
+Parameters: `track_index`, `value` (−1.0 = full left, 0.0 = center, 1.0 = full right). Works on all track types including master and return tracks.
 
 ### `set_track_mute`
 
-Parameters: `track_index`, `mute` (bool). Mutes or unmutes the track.
+Parameters: `track_index`, `mute` (bool). Works on regular, group, and return tracks. Master cannot be muted.
 
 ### `set_track_solo`
 
-Parameters: `track_index`, `solo` (bool). Solos or un-solos the track.
+Parameters: `track_index`, `solo` (bool). Works on regular, group, and return tracks. Master cannot be soloed.
 
 ### `set_track_arm`
 
-Parameters: `track_index`, `arm` (bool). Arms or disarms a track for recording. Only works on tracks that can be armed (MIDI and audio tracks, not return or master).
+Parameters: `track_index`, `arm` (bool). Only works on tracks where `can_be_armed` is true (typically MIDI and audio tracks).
+
+### `set_track_fold`
+
+Parameters: `track_index`, `folded` (bool). Expands (`folded=False`) or collapses (`folded=True`) a group track. Only works on group tracks (`is_foldable=True`). **Must be called before loading devices onto child tracks** — children of collapsed groups appear invisible in the Live API.
 
 ### `toggle_device`
 
@@ -455,6 +553,8 @@ After restarting Ableton, Claude can load the analyzer onto any track automatica
 
 Or call `load_analyzer_device(track_index=2)` directly.
 
+**Before loading on all tracks:** call `set_track_fold(track_index, folded=False)` on every group track first — children of collapsed groups are invisible and reject device loads. Identify groups from `get_track_info` where `is_group_track=True`.
+
 ### Reading band levels
 
 Once the device is on a track (e.g., device index 5), call:
@@ -463,16 +563,19 @@ Once the device is on a track (e.g., device index 5), call:
 get_device_parameters(track_index=0, device_index=5)
 ```
 
-The 6 named parameters and what they represent:
+The 9 named parameters and what they represent:
 
-| Parameter name | Band     | Frequency range | Value range |
-|----------------|----------|-----------------|-------------|
-| Sub Level      | Sub      | 20–60 Hz        | -70 to 0 dB |
-| Low Level      | Low      | 60–200 Hz       | -70 to 0 dB |
-| LoMid Level    | Lo-Mid   | 200–500 Hz      | -70 to 0 dB |
-| Mid Level      | Mid      | 500–2000 Hz     | -70 to 0 dB |
-| HiMid Level    | Hi-Mid   | 2000–8000 Hz    | -70 to 0 dB |
-| Hi Level       | Hi       | 8000+ Hz        | -70 to 0 dB |
+| Parameter name   | Band       | Center freq | Value range |
+|------------------|------------|-------------|-------------|
+| Sub Level        | Sub        | 40 Hz       | -70 to 0 dB |
+| Low Level        | Low        | 110 Hz      | -70 to 0 dB |
+| LoMid Level      | Lo-Mid     | 316 Hz      | -70 to 0 dB |
+| Mud Level        | Mud        | 700 Hz      | -70 to 0 dB |
+| Presence Level   | Presence   | 1500 Hz     | -70 to 0 dB |
+| Upper Level      | Upper      | 3000 Hz     | -70 to 0 dB |
+| Definition Level | Definition | 5000 Hz     | -70 to 0 dB |
+| Brilliance Level | Brilliance | 9000 Hz     | -70 to 0 dB |
+| Air Level        | Air        | 14000 Hz    | -70 to 0 dB |
 
 Values are peak amplitude in dB over ~23ms windows. Values near -70 dB = silence; values near 0 dB = full signal.
 
@@ -491,69 +594,78 @@ Scan all tracks' M4L Analyzer devices to build a full-session frequency map. A *
 
 With Phase 1 + 2 in place, a complete data-driven mixing session follows these steps:
 
-### Step 1 — Gain staging audit
+### Step 1 — Device inventory and analyzer setup
 
+Start with `get_session_info` to get the full track list including `track_type` and `is_group_track` flags, and pre-computed negative indices for return tracks.
+
+For each track (regular, group, and return), call `get_track_info(track_index)` and check the `devices` list. Use the `track_type` field to route correctly:
+
+- **`"audio"` / `"midi"` / `"group"`** — full device chain expected; check for standard rack; load analyzer
+- **`"return"`** — carries send effects (reverb, delay); check devices; load analyzer; skip clip operations
+- **`"master"`** — mastering chain only; handled separately in mastering sessions
+
+**Standard chain check** — regular tracks use an Audio Effect Rack ("Basic Chain FF Gain Reduction") that contains FabFilter Pro-Q 3, Pro-C 2, Glue Compressor, and Utility. Use `get_rack_devices(track_index, rack_device_index)` to read inside the rack. If a track is missing the rack entirely, flag it. Return tracks typically have individual effect devices, not the rack.
+
+**Group tracks** — treat like regular tracks for device/EQ purposes. They bus the summed output of their child tracks. Apply EQ and compression at the group level for bus processing. Never attempt clip operations on a group track.
+
+**AbletonMCP Analyzer** — load on every track including return tracks and the master. Call `load_analyzer_device(track_index)` immediately for any track missing it. Do not wait to be asked.
+
+### Step 2 — Run level + frequency sampling
+
+Once all analyzers are loaded, run the sampling script:
+
+```bash
+python sample_levels.py --duration <arrangement_length_seconds + 10>
 ```
-get_track_levels()
-```
 
-Flag any track with `output_meter_peak > 0.89` (~−1 dBFS) as too hot. Target: peaks at −10 to −6 dBFS during performance (roughly 0.32–0.50).
+Get the correct duration from `get_session_info` → `arrangement_length_seconds` + 10s buffer. **Never use the 90s default** — it won't cover a full song. This starts playback, samples `get_track_levels` every 200ms and `get_all_analyzer_levels` every 2s, then writes `sessions/levels-{timestamp}.json`. Read that file as the data source for all subsequent steps.
 
-### Step 2 — Device inventory and analyzer setup
-
-For each track, call `get_track_info(track_index)` and check the `devices` list. Confirm:
-- EQ Eight present (class_name `Eq8`)
-- Compressor or Glue Compressor present
-- Utility present
-- Spectrum present
-- AbletonMCP Analyzer present (last in chain, class_name contains `MaxDevice` or name contains `AbletonMCP`)
-
-**For any track missing the AbletonMCP Analyzer, call `load_analyzer_device(track_index)` immediately** — do not wait to be asked. Load it on all tracks before proceeding to the frequency map step.
-
-Note device indices for use in subsequent steps.
+**Gain staging** — from the levels JSON, flag any track where `peak_max_dbfs > -6` as too hot, and any active track (`active_ratio > 0.05`) where `peak_max_dbfs < -20` as too quiet.
 
 ### Step 3 — HPF audit
 
-For each track's EQ Eight, call `get_device_parameters` and find the HPF band. Compare against the standard cutoffs:
+Use `get_rack_devices` to read the FabFilter Pro-Q 3 inside each track's rack. Find the HPF band and compare against standard cutoffs:
 - Kick/bass/floor tom: 40 Hz
 - Most instruments: 80–100 Hz
 - Hi-hats/cymbals: 250–500 Hz
 
-Apply corrections via `set_device_parameter`.
+Apply corrections via `set_rack_device_parameter`.
 
 ### Step 4 — Frequency map
 
-For each track's M4L Analyzer device, read all 6 band levels. Build a table:
+Build a band-level table from `freq_avg` in the levels JSON:
 
 ```
-Track     | Sub  | Low  | LoMid | Mid  | HiMid | Hi
-----------|------|------|-------|------|-------|----
-Bass      | -8   | -12  | -35   | -55  | -70   | -70
-Kick      | -15  | -18  | -28   | -48  | -62   | -70
-Lead      | -70  | -45  | -22   | -14  | -18   | -35
+Track | Sub  | Low  | LoMid | Mud  | Pres | Upper | Def  | Bril | Air
+------|------|------|-------|------|------|-------|------|------|-----
+Bass  | -8   | -12  | -35   | -55  | -70  | -70   | -70  | -70  | -70
+Kick  | -15  | -18  | -28   | -40  | -62  | -70   | -70  | -70  | -70
+Lead  | -70  | -45  | -22   | -18  | -14  | -18   | -22  | -35  | -50
 ```
+
+Note: the 9-band analyzer targets the key mixing trouble frequencies directly — Mud (700Hz), Presence (1.5kHz), Definition (5kHz) map onto common problem areas. Use band data for directional guidance and rely on listening for precise identification.
 
 ### Step 5 — Masking detection
 
-Flag bands where more than one track has energy > -20 dB. State the specific conflict:
+Flag bands where more than one track has `freq_avg` energy > -20 dB. State the specific conflict:
 > "Bass and Kick both have significant energy in Low (-12 dB and -18 dB). Cut 2–3 dB at 110 Hz on the Kick using a narrow Q (2–3)."
 
 ### Step 6 — Trouble frequency check
 
-For each track, compare band levels against the 6 trouble frequencies:
-- 200 Hz (LoMid band): if > -20 dB, check for muddiness → narrow cut
-- 300–500 Hz (LoMid): if > -18 dB on kick → boxy sound → cut
-- 800 Hz / 1.5 kHz (Mid band): if elevated → check for harshness
-- 4–6 kHz (HiMid): if low → boost 1–2 dB, wide Q, to bring forward
-- 10 kHz+ (Hi): if low → gentle shelf boost
+For each active track, compare `freq_avg` bands against the 6 trouble frequencies:
+- 316 Hz (LoMid band): if > -20 dB, check for muddiness → narrow cut
+- 700 Hz (Mud band): if > -18 dB → boxy/cheap sound → cut
+- 1.5 kHz (Presence band): if elevated → check for harshness/nasal → cut 1–2 dB
+- 3–5 kHz (Upper/Definition bands): if low → boost 1–2 dB, wide Q, to bring forward
+- 9–14 kHz (Brilliance/Air bands): if low → gentle shelf boost
 
 ### Step 7 — Apply corrections
 
-Use `set_device_parameter` to apply each agreed EQ move. Read `get_device_parameters` first to confirm the parameter index and verify min/max bounds.
+Use `set_rack_device_parameter` to apply EQ moves to the Pro-Q 3 inside the rack. Read `get_rack_devices` first to confirm parameter indices and min/max bounds.
 
 ### Step 8 — Verify and sign off
 
-Re-run `get_track_levels` and `get_device_parameters` on each M4L Analyzer to confirm improvement. Run the Mastering Prep Checklist before export.
+Re-run `python sample_levels.py --duration 30` after corrections to confirm improvement. Run the Mastering Prep Checklist before export.
 
 ## CC Mastering Session
 
@@ -602,14 +714,17 @@ Loudness matching must happen before spectral comparison — otherwise you are c
 With levels matched, play both tracks and read their M4L Analyzer parameters. Build a comparison table:
 
 ```
-Band    | Reference | Mix   | Delta
---------|-----------|-------|-------
-Sub     | −22 dB    | −25   | −3 (mix light)
-Low     | −14 dB    | −11   | +3 (mix heavy)
-LoMid   | −18 dB    | −22   | −4 (mix thin)
-Mid     | −16 dB    | −18   | −2 (within tolerance)
-HiMid   | −12 dB    | −8    | +4 (mix harsh)
-Hi      | −20 dB    | −24   | −4 (mix dull)
+Band       | Reference | Mix   | Delta
+-----------|-----------|-------|-------
+Sub        | −22 dB    | −25   | −3 (mix light)
+Low        | −14 dB    | −11   | +3 (mix heavy)
+LoMid      | −18 dB    | −22   | −4 (mix thin)
+Mud        | −20 dB    | −20   | 0 (within tolerance)
+Presence   | −16 dB    | −18   | −2 (within tolerance)
+Upper      | −18 dB    | −18   | 0 (within tolerance)
+Definition | −12 dB    | −8    | +4 (mix harsh)
+Brilliance | −18 dB    | −20   | −2 (within tolerance)
+Air        | −20 dB    | −24   | −4 (mix dull)
 ```
 
 ### Step 5 — Apply EQ corrections on master
@@ -620,8 +735,8 @@ For each band where the delta exceeds 2 dB, apply a correction to master EQ Eigh
 |-------|-----------|--------|
 | Mix heavy (+3 dB Low) | Cut | −3 dB around 110 Hz, Q 0.7 |
 | Mix light (−4 dB LoMid) | Boost | +3 dB around 316 Hz, Q 0.7 (leave 1 dB headroom) |
-| Mix harsh (+4 dB HiMid) | Cut | −3 dB around 4 kHz, Q 0.7 |
-| Mix dull (−4 dB Hi) | Boost | +3 dB shelf above 10 kHz |
+| Mix harsh (+4 dB Definition) | Cut | −3 dB around 5 kHz, Q 0.7 |
+| Mix dull (−4 dB Air) | Boost | +3 dB shelf above 10 kHz |
 
 Use `set_device_parameter` to apply. Always read current parameter values first with `get_device_parameters` to confirm band frequencies and indices.
 

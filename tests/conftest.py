@@ -76,12 +76,24 @@ def _make_param(name, value=0.0, min_val=0.0, max_val=1.0, is_quantized=False):
     return p
 
 
-def _make_device(name, class_name, params):
+def _make_device(name, class_name, params, can_have_chains=False, chains=None):
     d = MagicMock()
     d.name = name
     d.class_name = class_name
     d.parameters = params
+    d.can_have_chains = can_have_chains
+    d.chains = chains or []
     return d
+
+
+def _make_rack_device(rack_name, chain_name, inner_device_name, inner_params):
+    """Build a rack device with one chain containing one device."""
+    inner_device = _make_device(inner_device_name, "PluginDevice", inner_params)
+    chain = MagicMock()
+    chain.name = chain_name
+    chain.devices = [inner_device]
+    rack = _make_device(rack_name, "AudioEffectGroupDevice", [], can_have_chains=True, chains=[chain])
+    return rack
 
 
 def _make_mixer_device(volume=0.85, pan=0.0):

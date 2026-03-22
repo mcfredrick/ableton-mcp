@@ -10,6 +10,8 @@ import json
 import os
 import platform
 import shutil
+import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).parent.resolve()
@@ -24,8 +26,13 @@ def find_remote_scripts_dir():
     if IS_WINDOWS:
         candidates = [Path.home() / "Documents" / "Ableton" / "User Library" / "Remote Scripts"]
     else:
-        candidates = [Path.home() / "Music" / "Ableton" / "User Library" / "Remote Scripts"]
-        # Fallback: glob for versioned prefs dirs, pick the highest version
+        # App bundle takes precedence — Ableton loads from here over User Library
+        app_bundle_candidates = sorted(
+            glob.glob("/Applications/Ableton Live*.app/Contents/App-Resources/MIDI Remote Scripts"),
+            reverse=True,
+        )
+        candidates = [Path(p) for p in app_bundle_candidates]
+        candidates.append(Path.home() / "Music" / "Ableton" / "User Library" / "Remote Scripts")
         versioned = sorted(
             glob.glob(str(Path.home() / "Library" / "Preferences" / "Ableton" / "Live *" / "User Remote Scripts"))
         )
@@ -53,10 +60,22 @@ def find_m4l_presets_dir():
         / "Music"
         / "Ableton"
         / "User Library"
-        / "Presets"
+        / "M4L"
         / "Audio Effects"
-        / "Max Audio Effect"
     )
+
+
+def step0_generate_analyzer():
+    print("\n[Step 0] Generating AbletonMCP Analyzer patch...")
+    script = REPO_ROOT / "Max4Live" / "generate_analyzer_patch.py"
+    result = subprocess.run(
+        [sys.executable, str(script)],
+        capture_output=True, text=True
+    )
+    if result.returncode == 0:
+        print("  " + result.stdout.strip().split("\n")[0])  # print "Written: ..." line
+    else:
+        print(f"  ERROR: {result.stderr}")
 
 
 def step1_install_remote_script():
@@ -154,6 +173,7 @@ Setup complete. Next steps:
 
 if __name__ == "__main__":
     print(f"AbletonMCP Installer — repo: {REPO_ROOT}")
+    step0_generate_analyzer()
     step1_install_remote_script()
     step2_install_analyzer()
     step3_configure_mcp()

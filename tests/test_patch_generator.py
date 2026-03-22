@@ -27,15 +27,15 @@ def test_generate_returns_patcher_structure():
 
 
 def test_generate_correct_box_count():
-    # 3 static (plugin~, plugout~, title comment) + 6 bands × 5 objects = 33
+    # 3 static (plugin~, plugout~, title comment) + 9 bands × 5 objects = 48
     patch = generate()
-    assert len(patch["boxes"]) == 33
+    assert len(patch["boxes"]) == 48
 
 
 def test_generate_correct_line_count():
-    # 2 pass-through (plugin→plugout L+R) + 6 bands × 4 connections = 26
+    # 2 pass-through (plugin→plugout L+R) + 9 bands × 4 connections = 38
     patch = generate()
-    assert len(patch["lines"]) == 26
+    assert len(patch["lines"]) == 38
 
 
 def test_all_parameters_have_correct_range():
@@ -44,12 +44,12 @@ def test_all_parameters_have_correct_range():
         b["box"] for b in patch["boxes"]
         if b.get("box", {}).get("maxclass") == "live.numbox"
     ]
-    assert len(numboxes) == 6
+    assert len(numboxes) == 9
     for nb in numboxes:
         saved = nb["saved_attribute_attributes"]["valueof"]
-        assert saved["parameter_mmin"]["value"] == -70.0
-        assert saved["parameter_mmax"]["value"] == 0.0
-        assert saved["parameter_enable"]["value"] == 1
+        assert saved["parameter_mmin"] == -70.0
+        assert saved["parameter_mmax"] == 0.0
+        assert saved["parameter_enable"] == 1
 
 
 def test_band_names_match_canonical_list():
@@ -58,6 +58,10 @@ def test_band_names_match_canonical_list():
         b["box"] for b in patch["boxes"]
         if b.get("box", {}).get("maxclass") == "live.numbox"
     ]
-    long_names = [nb["saved_attribute_attributes"]["valueof"]["parameter_longname"]["value"] for nb in numboxes]
-    expected = ["Sub Level", "Low Level", "LoMid Level", "Mid Level", "HiMid Level", "Hi Level"]
+    long_names = [nb["saved_attribute_attributes"]["valueof"]["parameter_longname"] for nb in numboxes]
+    expected = [
+        "Sub Level", "Low Level", "LoMid Level", "Mud Level",
+        "Presence Level", "Upper Level", "Definition Level",
+        "Brilliance Level", "Air Level",
+    ]
     assert long_names == expected

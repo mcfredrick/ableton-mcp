@@ -1,5 +1,5 @@
 """
-Generate AbletonMCP_Analyzer.amxd — a 6-band RMS analyzer M4L audio effect device.
+Generate AbletonMCP_Analyzer.amxd — a 9-band RMS analyzer M4L audio effect device.
 
 .amxd files are Max patches with a different extension. No Max/MSP required.
 
@@ -9,15 +9,19 @@ Run: python Max4Live/generate_analyzer_patch.py
 import json
 import math
 import os
+import struct
 
 
 BANDS = [
-    {"short": "Sub",   "long": "Sub Level",   "fc": 40,    "q": 0.5},
-    {"short": "Low",   "long": "Low Level",   "fc": 110,   "q": 1.5},
-    {"short": "LoMid", "long": "LoMid Level", "fc": 316,   "q": 1.5},
-    {"short": "Mid",   "long": "Mid Level",   "fc": 1000,  "q": 1.5},
-    {"short": "HiMid", "long": "HiMid Level", "fc": 4000,  "q": 1.5},
-    {"short": "Hi",    "long": "Hi Level",    "fc": 12000, "q": 0.7},
+    {"short": "Sub",        "long": "Sub Level",        "fc": 40,    "q": 0.5},
+    {"short": "Low",        "long": "Low Level",        "fc": 110,   "q": 1.5},
+    {"short": "LoMid",      "long": "LoMid Level",      "fc": 316,   "q": 1.5},
+    {"short": "Mud",        "long": "Mud Level",        "fc": 700,   "q": 2.0},
+    {"short": "Presence",   "long": "Presence Level",   "fc": 1500,  "q": 2.0},
+    {"short": "Upper",      "long": "Upper Level",      "fc": 3000,  "q": 1.5},
+    {"short": "Definition", "long": "Definition Level", "fc": 5000,  "q": 1.5},
+    {"short": "Brilliance", "long": "Brilliance Level", "fc": 9000,  "q": 1.5},
+    {"short": "Air",        "long": "Air Level",        "fc": 14000, "q": 0.7},
 ]
 
 SAMPLE_RATE = 44100
@@ -77,27 +81,31 @@ def make_comment(id_, text, x, y, w, h):
     return {"box": box}
 
 
-def make_live_numbox(id_, band, x, y):
+def make_live_numbox(id_, band, x, y, mapping_index):
+    # varname is required for Live to register the parameter in its device parameter API.
+    # saved_attribute_attributes values must be flat (raw values), verified against Verbotron.amxd.
+    # outlettype[1] must be "float" not "bang" (Verbotron reference).
     saved_attrs = {
         "valueof": {
-            "parameter_enable": {"value": 1},
-            "parameter_longname": {"value": band["long"]},
-            "parameter_shortname": {"value": band["short"]},
-            "parameter_mmin": {"value": -70.0},
-            "parameter_mmax": {"value": 0.0},
-            "parameter_type": {"value": 0},
-            "parameter_unitstyle": {"value": 2},
-            "parameter_initial": {"value": [-70.0]},
-            "parameter_initial_enable": {"value": 1},
+            "parameter_longname": band["long"],
+            "parameter_shortname": band["short"],
+            "parameter_mmin": -70.0,
+            "parameter_mmax": 0.0,
+            "parameter_type": 0,
+            "parameter_unitstyle": 2,
+            "parameter_mapping_index": mapping_index,
+            "parameter_initial_enable": 1,
+            "parameter_initial": [-70.0],
         }
     }
     box = {
         "id": id_,
         "maxclass": "live.numbox",
+        "varname": band["short"],
         "patching_rect": rect(x, y, 120, 40),
         "numinlets": 1,
         "numoutlets": 2,
-        "outlettype": ["", "bang"],
+        "outlettype": ["", "float"],
         "parameter_enable": 1,
         "saved_attribute_attributes": saved_attrs,
     }
@@ -113,6 +121,18 @@ def make_line(src_id, src_outlet, dst_id, dst_inlet):
     }
 
 
+TEMPLATE_PATH = "/Applications/Ableton Live 12 Suite.app/Contents/App-Resources/Misc/Max Devices/Max Audio Effect.amxd"
+
+
+def load_template():
+    """Parse the Max Audio Effect template to get all required patcher-level metadata."""
+    with open(TEMPLATE_PATH, "rb") as f:
+        data = f.read()
+    idx = data.find(b"{")
+    j, _ = json.JSONDecoder().raw_decode(data[idx:].decode("utf-8", errors="ignore"))
+    return j["patcher"]
+
+
 def generate():
     boxes = []
     lines = []
@@ -123,7 +143,7 @@ def generate():
 
     boxes.append(make_comment(
         "obj-title",
-        "AbletonMCP Analyzer — 6-band RMS level meter",
+        "AbletonMCP Analyzer — 9-band RMS level meter",
         10, 8, 500, 20,
     ))
 
@@ -173,7 +193,7 @@ def generate():
             x, ROW_Y["atodb"], 60, 22,
             numinlets=1, numoutlets=1, outlettype=[""],
         ))
-        boxes.append(make_live_numbox(nb_id, band, x, ROW_Y["numbox"]))
+        boxes.append(make_live_numbox(nb_id, band, x, ROW_Y["numbox"], mapping_index=i))
         boxes.append(make_comment(
             lbl_id,
             f"{band['short']} ({band['fc']} Hz)",
@@ -186,33 +206,29 @@ def generate():
         lines.append(make_line(pa_id, 0, db_id, 0))
         lines.append(make_line(db_id, 0, nb_id, 0))
 
-    patch = {
-        "fileversion": 1,
-        "appversion": {
-            "major": 8,
-            "minor": 6,
-            "revision": 0,
-            "architecture": "x64",
-            "modernui": 1,
-        },
-        "classnamespace": "dsp.devicepreprocessor",
-        "rect": [100, 100, COL_START_X * 2 + len(BANDS) * COL_WIDTH + 20, 340],
-        "bglocked": 0,
-        "openinpresentation": 0,
-        "default_fontsize": 12.0,
-        "default_fontface": 0,
-        "default_fontname": "Arial",
-        "gridonopen": 1,
-        "gridsize": [15.0, 15.0],
-        "gridsnaponopen": 1,
-        "objectsnaponopen": 1,
-        "statusbarvisible": 2,
-        "toolbarvisible": 1,
-        "boxes": boxes,
-        "lines": lines,
-        "dependency_cache": [],
-        "autosave": 0,
+    # Top-level parameters registry — required for Ableton to expose live.numbox
+    # objects via the device parameter API. Format: {box_id: [longname, shortname, type]}.
+    # Verified against Verbotron.amxd.
+    parameters = {
+        f"obj-nb-{i}": [band["long"], band["short"], 0]
+        for i, band in enumerate(BANDS)
     }
+    parameters["parameterbanks"] = {
+        "0": {
+            "index": 0,
+            "name": "",
+            "parameters": [band["short"] for band in BANDS],
+        }
+    }
+
+    # Start from the official Max Audio Effect template so all required patcher-level
+    # metadata fields (devicewidth, subpatcher_template, project, digest, etc.) are
+    # present. Ableton needs these to properly register live.* parameters.
+    patch = load_template()
+    patch["rect"] = [100, 100, COL_START_X * 2 + len(BANDS) * COL_WIDTH + 20, 340]
+    patch["boxes"] = boxes
+    patch["lines"] = lines
+    patch["parameters"] = parameters
 
     return patch
 
@@ -223,8 +239,24 @@ def main():
 
     patch = generate()
 
-    with open(out_path, "w") as f:
-        json.dump({"patcher": patch}, f, indent=2)
+    json_bytes = json.dumps({"patcher": patch}, indent=2).encode("utf-8")
+
+    # .amxd binary wrapper — format verified against Max Audio Effect.amxd template.
+    # Header (32 bytes): ampf + version(4) + aaaa + meta-chunk(12) + ptch + json_size(4)
+    # meta chunk = 'meta' + size(4=4) + 4-byte-data(zeros)
+    header = (
+        b'ampf'
+        + struct.pack('<I', 4)                      # version
+        + b'aaaa'
+        + b'meta'
+        + struct.pack('<I', 4)                      # meta chunk data length = 4 bytes
+        + b'\x00' * 4                               # meta data (zeros)
+        + b'ptch'
+        + struct.pack('<I', len(json_bytes))        # ptch chunk = just the JSON
+    )
+
+    with open(out_path, "wb") as f:
+        f.write(header + json_bytes)
 
     box_count = len(patch["boxes"])
     line_count = len(patch["lines"])
@@ -238,7 +270,7 @@ def main():
     print("  1. Open Ableton Live (no Max/MSP needed)")
     print("  2. Drag Max4Live/AbletonMCP_Analyzer.amxd onto a track as an audio effect")
     print("  3. Use get_device_parameters MCP command to read band levels")
-    print("  4. Parameters: Sub Level, Low Level, LoMid Level, Mid Level, HiMid Level, Hi Level")
+    print("  4. Parameters: Sub Level, Low Level, LoMid Level, Mud Level, Presence Level, Upper Level, Definition Level, Brilliance Level, Air Level")
 
 
 if __name__ == "__main__":

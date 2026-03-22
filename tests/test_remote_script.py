@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import MagicMock
 
 
 def test_get_track_levels_returns_required_keys(ableton_script):
@@ -125,8 +126,43 @@ def test_set_track_arm_raises_when_cannot_be_armed(ableton_script, mock_song):
         ableton_script._set_track_arm(0, True)
 
 
+def test_get_rack_devices_returns_chains(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_rack_device
+    params = [_make_param("Gain", 0.5, -70.0, 6.0)]
+    rack = _make_rack_device("My Rack", "Chain A", "Pro-Q 3", params)
+    mock_song.tracks[0].devices = [rack]
+    result = ableton_script._get_rack_devices(0, 0)
+    assert result["rack_name"] == "My Rack"
+    assert len(result["chains"]) == 1
+    assert result["chains"][0]["name"] == "Chain A"
+    assert result["chains"][0]["devices"][0]["name"] == "Pro-Q 3"
+    assert len(result["chains"][0]["devices"][0]["parameters"]) == 1
+
+
+def test_get_rack_devices_raises_when_not_rack(ableton_script, mock_song):
+    mock_song.tracks[0].devices[0].can_have_chains = False
+    with pytest.raises(ValueError, match="does not support chains"):
+        ableton_script._get_rack_devices(0, 0)
+
+
+def test_set_rack_device_parameter_sets_value(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_rack_device
+    params = [_make_param("Gain", 0.0, -70.0, 6.0)]
+    rack = _make_rack_device("My Rack", "Chain A", "Pro-Q 3", params)
+    mock_song.tracks[0].devices = [rack]
+    ableton_script._set_rack_device_parameter(0, 0, 0, 0, 0, 3.5)
+    assert rack.chains[0].devices[0].parameters[0].value == 3.5
+
+
+def test_set_rack_device_parameter_invalid_chain_raises(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_rack_device
+    rack = _make_rack_device("My Rack", "Chain A", "Pro-Q 3", [_make_param("X")])
+    mock_song.tracks[0].devices = [rack]
+    with pytest.raises(IndexError):
+        ableton_script._set_rack_device_parameter(0, 0, 99, 0, 0, 1.0)
+
+
 def test_get_clip_notes_returns_notes(ableton_script, mock_song):
-    from unittest.mock import MagicMock
     slot = MagicMock()
     slot.has_clip = True
     clip = MagicMock()
@@ -144,3 +180,97 @@ def test_get_clip_notes_returns_notes(ableton_script, mock_song):
     assert len(result["notes"]) == 2
     assert result["notes"][0]["pitch"] == 60
     assert result["length"] == 4.0
+
+
+# --- get_all_analyzer_levels ---
+
+ANALYZER_BAND_NAMES = [
+    "Sub Level", "Low Level", "LoMid Level", "Mud Level",
+    "Presence Level", "Upper Level", "Definition Level",
+    "Brilliance Level", "Air Level",
+]
+
+
+def _make_analyzer_device(band_values):
+    """Build a mock AbletonMCP Analyzer device with the 9 band parameters."""
+    from tests.conftest import _make_param, _make_device
+    params = [_make_param(name, value) for name, value in zip(ANALYZER_BAND_NAMES, band_values)]
+    return _make_device("AbletonMCP Analyzer", "MaxDevice", params)
+
+
+def test_get_all_analyzer_levels_returns_required_keys(ableton_script, mock_song):
+    analyzer = _make_analyzer_device([-45.0] * 9)
+    mock_song.tracks[0].devices = [analyzer]
+    mock_song.tracks[1].devices = []
+    result = ableton_script._get_all_analyzer_levels()
+    assert "tracks" in result
+    assert "return_tracks" in result
+
+
+def test_get_all_analyzer_levels_only_includes_tracks_with_analyzer(ableton_script, mock_song):
+    analyzer = _make_analyzer_device([-45.0] * 9)
+    mock_song.tracks[0].devices = [analyzer]
+    mock_song.tracks[1].devices = []  # no analyzer
+    result = ableton_script._get_all_analyzer_levels()
+    assert len(result["tracks"]) == 1
+    assert result["tracks"][0]["index"] == 0
+    assert result["tracks"][0]["name"] == mock_song.tracks[0].name
+
+
+def test_get_all_analyzer_levels_band_values(ableton_script, mock_song):
+    band_values = [-45.0, -22.0, -18.0, -30.0, -25.0, -20.0, -15.0, -12.0, -28.0]
+    analyzer = _make_analyzer_device(band_values)
+    mock_song.tracks[0].devices = [analyzer]
+    mock_song.tracks[1].devices = []
+    result = ableton_script._get_all_analyzer_levels()
+    bands = result["tracks"][0]["bands"]
+    assert bands["sub"] == -45.0
+    assert bands["low"] == -22.0
+    assert bands["lo_mid"] == -18.0
+    assert bands["mud"] == -30.0
+    assert bands["presence"] == -25.0
+    assert bands["upper"] == -20.0
+    assert bands["definition"] == -15.0
+    assert bands["brilliance"] == -12.0
+    assert bands["air"] == -28.0
+
+
+def test_get_all_analyzer_levels_missing_band_defaults_to_minus96(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_device
+    # Only provide 3 of 9 bands
+    params = [
+        _make_param("Sub Level", -40.0),
+        _make_param("Low Level", -20.0),
+        _make_param("Mud Level", -15.0),
+    ]
+    analyzer = _make_device("AbletonMCP Analyzer", "MaxDevice", params)
+    mock_song.tracks[0].devices = [analyzer]
+    mock_song.tracks[1].devices = []
+    result = ableton_script._get_all_analyzer_levels()
+    bands = result["tracks"][0]["bands"]
+    assert bands["lo_mid"] == -96.0
+    assert bands["presence"] == -96.0
+    assert bands["air"] == -96.0
+    assert bands["sub"] == -40.0
+    assert bands["mud"] == -15.0
+
+
+def test_get_all_analyzer_levels_detects_by_class_name(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_device
+    params = [_make_param(name, -30.0) for name in ANALYZER_BAND_NAMES]
+    # Name does NOT contain AbletonMCP, but class_name contains MaxDevice
+    analyzer = _make_device("Some M4L Device", "MaxDevice", params)
+    mock_song.tracks[0].devices = [analyzer]
+    mock_song.tracks[1].devices = []
+    result = ableton_script._get_all_analyzer_levels()
+    assert len(result["tracks"]) == 1
+
+
+def test_get_all_analyzer_levels_reports_correct_device_index(ableton_script, mock_song):
+    from tests.conftest import _make_param, _make_device
+    eq = _make_device("EQ Eight", "PluginDevice", [_make_param("Gain")])
+    analyzer = _make_analyzer_device([-50.0] * 9)
+    mock_song.tracks[0].devices = [eq, analyzer]
+    mock_song.tracks[1].devices = []
+    result = ableton_script._get_all_analyzer_levels()
+    assert result["tracks"][0]["analyzer_device_index"] == 1

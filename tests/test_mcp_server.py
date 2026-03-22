@@ -152,3 +152,31 @@ def test_capture_session_snapshot_creates_file():
         from MCP_Server.server import capture_session_snapshot
         result = capture_session_snapshot(MagicMock(), label="pre-mix")
         assert "Snapshot saved" in result
+
+
+def test_get_rack_devices_sends_correct_params():
+    payload = {"rack_name": "My Rack", "chains": []}
+    mock_conn = _make_mock_ableton(payload)
+    with patch('MCP_Server.server.get_ableton_connection', return_value=mock_conn):
+        from MCP_Server.server import get_rack_devices
+        get_rack_devices(MagicMock(), track_index=2, device_index=1)
+        mock_conn.send_command.assert_called_once_with(
+            "get_rack_devices",
+            {"track_index": 2, "device_index": 1},
+        )
+
+
+def test_set_rack_device_parameter_sends_all_params():
+    mock_conn = _make_mock_ableton({"value": 3.5})
+    with patch('MCP_Server.server.get_ableton_connection', return_value=mock_conn):
+        from MCP_Server.server import set_rack_device_parameter
+        set_rack_device_parameter(
+            MagicMock(),
+            track_index=0, device_index=1, chain_index=0,
+            chain_device_index=0, parameter_index=2, value=3.5,
+        )
+        mock_conn.send_command.assert_called_once_with(
+            "set_rack_device_parameter",
+            {"track_index": 0, "device_index": 1, "chain_index": 0,
+             "chain_device_index": 0, "parameter_index": 2, "value": 3.5},
+        )

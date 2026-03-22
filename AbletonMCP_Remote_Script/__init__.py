@@ -227,6 +227,8 @@ class AbletonMCP(ControlSurface):
                 response["result"] = self._get_track_info(track_index)
             elif command_type == "get_track_levels":
                 response["result"] = self._get_track_levels()
+            elif command_type == "get_all_analyzer_levels":
+                response["result"] = self._get_all_analyzer_levels()
             elif command_type == "get_device_parameters":
                 track_index = params.get("track_index", 0)
                 device_index = params.get("device_index", 0)
@@ -237,6 +239,10 @@ class AbletonMCP(ControlSurface):
                 track_index = params.get("track_index", 0)
                 clip_index = params.get("clip_index", 0)
                 response["result"] = self._get_clip_notes(track_index, clip_index)
+            elif command_type == "get_rack_devices":
+                track_index = params.get("track_index", 0)
+                device_index = params.get("device_index", 0)
+                response["result"] = self._get_rack_devices(track_index, device_index)
             # Commands that modify Live's state should be scheduled on the main thread
             elif command_type in ["create_midi_track", "set_track_name",
                                  "create_clip", "add_notes_to_clip", "set_clip_name",
@@ -245,7 +251,10 @@ class AbletonMCP(ControlSurface):
                                  "set_device_parameter", "load_analyzer_device",
                                  "set_track_volume", "set_track_pan", "set_track_mute",
                                  "set_track_solo", "set_track_arm", "toggle_device",
-                                 "create_scene", "fire_scene", "set_scene_name"]:
+                                 "create_scene", "fire_scene", "set_scene_name",
+                                 "set_rack_device_parameter",
+                                 "set_track_fold",
+                                 "set_song_position"]:
                 # Use a thread-safe approach with a response queue
                 response_queue = queue.Queue()
                 
@@ -338,6 +347,21 @@ class AbletonMCP(ControlSurface):
                             scene_index = params.get("scene_index", 0)
                             name = params.get("name", "")
                             result = self._set_scene_name(scene_index, name)
+                        elif command_type == "set_rack_device_parameter":
+                            track_index = params.get("track_index", 0)
+                            device_index = params.get("device_index", 0)
+                            chain_index = params.get("chain_index", 0)
+                            chain_device_index = params.get("chain_device_index", 0)
+                            parameter_index = params.get("parameter_index", 0)
+                            value = params.get("value", 0.0)
+                            result = self._set_rack_device_parameter(track_index, device_index, chain_index, chain_device_index, parameter_index, value)
+                        elif command_type == "set_track_fold":
+                            track_index = params.get("track_index", 0)
+                            folded = params.get("folded", False)
+                            result = self._set_track_fold(track_index, folded)
+                        elif command_type == "set_song_position":
+                            position_beats = params.get("position_beats", 0.0)
+                            result = self._set_song_position(position_beats)
 
                         # Put the result in the queue
                         response_queue.put({"status": "success", "result": result})
@@ -382,21 +406,65 @@ class AbletonMCP(ControlSurface):
         return response
     
     # Command implementations
-    
+
+    def _resolve_track(self, track_index):
+        """Resolve a track_index to a Live track object.
+
+        Convention:
+          track_index >= 0  -> song.tracks[track_index]  (regular and group tracks)
+          track_index == -1 -> song.master_track
+          track_index <= -2 -> song.return_tracks[abs(track_index) - 2]
+                               (-2 = return A, -3 = return B, etc.)
+        """
+        if track_index == -1:
+            return self._song.master_track
+        elif track_index <= -2:
+            return_index = abs(track_index) - 2
+            if return_index >= len(self._song.return_tracks):
+                raise IndexError("Return track index out of range")
+            return self._song.return_tracks[return_index]
+        elif 0 <= track_index < len(self._song.tracks):
+            return self._song.tracks[track_index]
+        else:
+            raise IndexError("Track index out of range")
+
     def _get_session_info(self):
         """Get information about the current session"""
         try:
+            tracks = []
+            for i, track in enumerate(self._song.tracks):
+                tracks.append({
+                    "index": i,
+                    "name": track.name,
+                    "is_group_track": track.is_foldable,
+                    "is_audio_track": track.has_audio_input,
+                    "is_midi_track": track.has_midi_input,
+                })
+            return_tracks = []
+            for i, track in enumerate(self._song.return_tracks):
+                return_tracks.append({
+                    "index": -(i + 2),
+                    "name": track.name,
+                    "is_group_track": False,
+                    "is_audio_track": True,
+                    "is_midi_track": False,
+                })
             result = {
                 "tempo": self._song.tempo,
                 "signature_numerator": self._song.signature_numerator,
                 "signature_denominator": self._song.signature_denominator,
                 "track_count": len(self._song.tracks),
                 "return_track_count": len(self._song.return_tracks),
+                "tracks": tracks,
+                "return_tracks": return_tracks,
                 "master_track": {
+                    "index": -1,
                     "name": "Master",
                     "volume": self._song.master_track.mixer_device.volume.value,
-                    "panning": self._song.master_track.mixer_device.panning.value
-                }
+                    "panning": self._song.master_track.mixer_device.panning.value,
+                },
+                "arrangement_length_beats": self._song.song_length,
+                "arrangement_length_seconds": self._song.song_length / self._song.tempo * 60.0,
             }
             return result
         except Exception as e:
@@ -404,33 +472,25 @@ class AbletonMCP(ControlSurface):
             raise
     
     def _get_track_info(self, track_index):
-        """Get information about a track"""
+        """Get information about a track.
+
+        Supports track_index=-1 (master), track_index<=-2 (return tracks),
+        and track_index>=0 (regular/group tracks). See _resolve_track for convention.
+        """
         try:
-            if track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            
-            track = self._song.tracks[track_index]
-            
-            # Get clip slots
-            clip_slots = []
-            for slot_index, slot in enumerate(track.clip_slots):
-                clip_info = None
-                if slot.has_clip:
-                    clip = slot.clip
-                    clip_info = {
-                        "name": clip.name,
-                        "length": clip.length,
-                        "is_playing": clip.is_playing,
-                        "is_recording": clip.is_recording
-                    }
-                
-                clip_slots.append({
-                    "index": slot_index,
-                    "has_clip": slot.has_clip,
-                    "clip": clip_info
-                })
-            
-            # Get devices
+            track = self._resolve_track(track_index)
+
+            # Determine track type for conditional field inclusion
+            if track_index == -1:
+                track_type = "master"
+            elif track_index <= -2:
+                track_type = "return"
+            elif track.is_foldable:
+                track_type = "group"
+            else:
+                track_type = "audio" if track.has_audio_input else "midi"
+
+            # Get devices (available on all track types)
             devices = []
             for device_index, device in enumerate(track.devices):
                 devices.append({
@@ -439,20 +499,46 @@ class AbletonMCP(ControlSurface):
                     "class_name": device.class_name,
                     "type": self._get_device_type(device)
                 })
-            
+
             result = {
                 "index": track_index,
                 "name": track.name,
-                "is_audio_track": track.has_audio_input,
-                "is_midi_track": track.has_midi_input,
-                "mute": track.mute,
-                "solo": track.solo,
-                "arm": track.arm,
+                "track_type": track_type,
+                "is_group_track": track_type == "group",
                 "volume": track.mixer_device.volume.value,
                 "panning": track.mixer_device.panning.value,
-                "clip_slots": clip_slots,
-                "devices": devices
+                "devices": devices,
             }
+
+            # Fields available on regular, group, and return tracks (not master)
+            if track_type != "master":
+                result["mute"] = track.mute
+                result["solo"] = track.solo
+
+            # Fields available only on regular and group tracks
+            if track_type in ("audio", "midi", "group"):
+                result["is_audio_track"] = track.has_audio_input
+                result["is_midi_track"] = track.has_midi_input
+                result["arm"] = track.arm if track.can_be_armed else None
+
+                clip_slots = []
+                for slot_index, slot in enumerate(track.clip_slots):
+                    clip_info = None
+                    if slot.has_clip:
+                        clip = slot.clip
+                        clip_info = {
+                            "name": clip.name,
+                            "length": clip.length,
+                            "is_playing": clip.is_playing,
+                            "is_recording": clip.is_recording
+                        }
+                    clip_slots.append({
+                        "index": slot_index,
+                        "has_clip": slot.has_clip,
+                        "clip": clip_info
+                    })
+                result["clip_slots"] = clip_slots
+
             return result
         except Exception as e:
             self.log_message("Error getting track info: " + str(e))
@@ -655,11 +741,16 @@ class AbletonMCP(ControlSurface):
             raise
     
     
+    def _set_song_position(self, position_beats):
+        """Set the arrangement playhead position in beats (0.0 = start)."""
+        self._song.current_song_time = float(position_beats)
+        return {"position_beats": self._song.current_song_time}
+
     def _start_playback(self):
         """Start playing the session"""
         try:
             self._song.start_playing()
-            
+
             result = {
                 "playing": self._song.is_playing
             }
@@ -682,14 +773,9 @@ class AbletonMCP(ControlSurface):
             raise
     
     def _load_browser_item(self, track_index, item_uri):
-        """Load a browser item onto a track by its URI. Use track_index=-1 for the master track."""
+        """Load a browser item onto a track by its URI. See _resolve_track for track_index convention."""
         try:
-            if track_index == -1:
-                track = self._song.master_track
-            elif track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            else:
-                track = self._song.tracks[track_index]
+            track = self._resolve_track(track_index)
             
             # Access the application's browser instance instead of creating a new one
             app = self.application()
@@ -720,12 +806,12 @@ class AbletonMCP(ControlSurface):
 
     def _load_analyzer_device(self, track_index):
         """Load the AbletonMCP Analyzer M4L device onto the given track"""
-        result = self.get_browser_items_at_path("audio_effects/Max Audio Effect")
+        result = self.get_browser_items_at_path("user_library/M4L/Audio Effects")
         items = result.get("items", [])
         analyzer_item = None
         for item in items:
             name = item.get("name", "")
-            if "abletonmcp" in name.lower():
+            if "abletonmcp_analyzer" in name.lower():
                 analyzer_item = item
                 break
         if analyzer_item is None:
@@ -747,14 +833,17 @@ class AbletonMCP(ControlSurface):
             
             # Check if this is a browser with root categories
             if hasattr(browser_or_item, 'instruments'):
-                # Check all main categories
+                # Check all main categories including user library
                 categories = [
                     browser_or_item.instruments,
                     browser_or_item.sounds,
                     browser_or_item.drums,
                     browser_or_item.audio_effects,
-                    browser_or_item.midi_effects
+                    browser_or_item.midi_effects,
                 ]
+                for attr in ('user_library', 'user_folders', 'packs', 'current_project'):
+                    if hasattr(browser_or_item, attr):
+                        categories.append(getattr(browser_or_item, attr))
                 
                 for category in categories:
                     item = self._find_browser_item_by_uri(category, uri, max_depth, current_depth + 1)
@@ -1073,20 +1162,80 @@ class AbletonMCP(ControlSurface):
                     "output_meter_right": master.output_meter_right,
                     "output_meter_peak": max(master.output_meter_left, master.output_meter_right),
                 },
+                "current_song_time": self._song.current_song_time,
             }
         except Exception as e:
             self.log_message("Error getting track levels: " + str(e))
             raise
 
-    def _get_device_parameters(self, track_index, device_index):
-        """Return all parameters for a device on a track. Use track_index=-1 for the master track."""
+    def _get_all_analyzer_levels(self):
+        """Return real-time frequency band levels from AbletonMCP Analyzer devices on all tracks."""
+        # Map both long names (legacy) and short names (current device uses varname as param name)
+        band_map = [
+            ("sub",        "Sub Level",        "Sub"),
+            ("low",        "Low Level",        "Low"),
+            ("lo_mid",     "LoMid Level",      "LoMid"),
+            ("mud",        "Mud Level",        "Mud"),
+            ("presence",   "Presence Level",   "Presence"),
+            ("upper",      "Upper Level",      "Upper"),
+            ("definition", "Definition Level", "Definition"),
+            ("brilliance", "Brilliance Level", "Brilliance"),
+            ("air",        "Air Level",        "Air"),
+        ]
+
+        def read_analyzer(track, index):
+            for dev_idx, device in enumerate(track.devices):
+                if 'AbletonMCP' in device.name or 'MaxDevice' in device.class_name:
+                    bands = {}
+                    param_map = {p.name: p.value for p in device.parameters}
+                    for key, long_name, short_name in band_map:
+                        bands[key] = param_map.get(long_name, param_map.get(short_name, -96.0))
+                    return dev_idx, bands
+            return None, None
+
         try:
-            if track_index == -1:
-                track = self._song.master_track
-            elif track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            else:
-                track = self._song.tracks[track_index]
+            tracks = []
+            for i, track in enumerate(self._song.tracks):
+                dev_idx, bands = read_analyzer(track, i)
+                if bands is not None:
+                    tracks.append({
+                        "index": i,
+                        "name": track.name,
+                        "analyzer_device_index": dev_idx,
+                        "bands": bands,
+                    })
+
+            return_tracks = []
+            for i, track in enumerate(self._song.return_tracks):
+                dev_idx, bands = read_analyzer(track, i)
+                if bands is not None:
+                    return_tracks.append({
+                        "index": -(i + 2),
+                        "name": track.name,
+                        "analyzer_device_index": dev_idx,
+                        "bands": bands,
+                    })
+
+            master_entry = None
+            master_track = self._song.master_track
+            dev_idx, bands = read_analyzer(master_track, -1)
+            if bands is not None:
+                master_entry = {
+                    "index": -1,
+                    "name": master_track.name,
+                    "analyzer_device_index": dev_idx,
+                    "bands": bands,
+                }
+
+            return {"tracks": tracks, "return_tracks": return_tracks, "master": master_entry}
+        except Exception as e:
+            self.log_message("Error getting analyzer levels: " + str(e))
+            raise
+
+    def _get_device_parameters(self, track_index, device_index):
+        """Return all parameters for a device on a track. See _resolve_track for track_index convention."""
+        try:
+            track = self._resolve_track(track_index)
 
             if device_index < 0 or device_index >= len(track.devices):
                 raise IndexError("Device index out of range")
@@ -1115,14 +1264,9 @@ class AbletonMCP(ControlSurface):
             raise
 
     def _set_device_parameter(self, track_index, device_index, parameter_index, value):
-        """Set a parameter value on a device. Use track_index=-1 for the master track."""
+        """Set a parameter value on a device. See _resolve_track for track_index convention."""
         try:
-            if track_index == -1:
-                track = self._song.master_track
-            elif track_index < 0 or track_index >= len(self._song.tracks):
-                raise IndexError("Track index out of range")
-            else:
-                track = self._song.tracks[track_index]
+            track = self._resolve_track(track_index)
 
             if device_index < 0 or device_index >= len(track.devices):
                 raise IndexError("Device index out of range")
@@ -1146,6 +1290,100 @@ class AbletonMCP(ControlSurface):
             self.log_message("Error setting device parameter: " + str(e))
             raise
 
+    def _get_rack_devices(self, track_index, device_index):
+        """Return all chains and their devices (with parameters) for a rack device."""
+        try:
+            track = self._resolve_track(track_index)
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+
+            device = track.devices[device_index]
+
+            if not device.can_have_chains:
+                raise ValueError("Device does not support chains")
+
+            chains = []
+            for chain_idx, chain in enumerate(device.chains):
+                chain_devices = []
+                for cd_idx, cd in enumerate(chain.devices):
+                    parameters = []
+                    for p_idx, param in enumerate(cd.parameters):
+                        try:
+                            parameters.append({
+                                "index": p_idx,
+                                "name": param.name,
+                                "value": param.value,
+                                "min": param.min,
+                                "max": param.max,
+                                "is_quantized": param.is_quantized,
+                            })
+                        except Exception:
+                            pass
+                    chain_devices.append({
+                        "chain_device_index": cd_idx,
+                        "name": cd.name,
+                        "class_name": cd.class_name,
+                        "parameters": parameters,
+                    })
+                chains.append({
+                    "index": chain_idx,
+                    "name": chain.name,
+                    "devices": chain_devices,
+                })
+
+            return {
+                "track_index": track_index,
+                "device_index": device_index,
+                "rack_name": device.name,
+                "chains": chains,
+            }
+        except Exception as e:
+            self.log_message("Error getting rack devices: " + str(e))
+            raise
+
+    def _set_rack_device_parameter(self, track_index, device_index, chain_index, chain_device_index, parameter_index, value):
+        """Set a parameter on a device inside a rack chain."""
+        try:
+            track = self._resolve_track(track_index)
+
+            if device_index < 0 or device_index >= len(track.devices):
+                raise IndexError("Device index out of range")
+
+            device = track.devices[device_index]
+
+            if not device.can_have_chains:
+                raise ValueError("Device does not support chains")
+
+            if chain_index < 0 or chain_index >= len(device.chains):
+                raise IndexError("Chain index out of range")
+
+            chain = device.chains[chain_index]
+
+            if chain_device_index < 0 or chain_device_index >= len(chain.devices):
+                raise IndexError("Chain device index out of range")
+
+            cd = chain.devices[chain_device_index]
+
+            if parameter_index < 0 or parameter_index >= len(cd.parameters):
+                raise IndexError("Parameter index out of range")
+
+            param = cd.parameters[parameter_index]
+            param.value = value
+
+            return {
+                "track_index": track_index,
+                "device_index": device_index,
+                "chain_index": chain_index,
+                "chain_device_index": chain_device_index,
+                "parameter_index": parameter_index,
+                "name": param.name,
+                "value": param.value,
+            }
+        except Exception as e:
+            self.log_message("Error setting rack device parameter: " + str(e))
+            raise
+
     def _get_track_volumes(self):
         """Return volume and pan for all tracks, return tracks, and master."""
         tracks = []
@@ -1162,10 +1400,12 @@ class AbletonMCP(ControlSurface):
         return_tracks = []
         for i, track in enumerate(self._song.return_tracks):
             return_tracks.append({
-                "index": i,
+                "index": -(i + 2),
                 "name": track.name,
                 "volume": track.mixer_device.volume.value,
                 "pan": track.mixer_device.panning.value,
+                "mute": track.mute,
+                "solo": track.solo,
             })
         master = self._song.master_track
         return {
@@ -1178,36 +1418,28 @@ class AbletonMCP(ControlSurface):
         }
 
     def _set_track_volume(self, track_index, volume):
-        if track_index == -1:
-            track = self._song.master_track
-        elif 0 <= track_index < len(self._song.tracks):
-            track = self._song.tracks[track_index]
-        else:
-            raise IndexError("Track index out of range")
+        track = self._resolve_track(track_index)
         track.mixer_device.volume.value = volume
         return {"track_index": track_index, "volume": track.mixer_device.volume.value}
 
     def _set_track_pan(self, track_index, pan):
-        if track_index == -1:
-            track = self._song.master_track
-        elif 0 <= track_index < len(self._song.tracks):
-            track = self._song.tracks[track_index]
-        else:
-            raise IndexError("Track index out of range")
+        track = self._resolve_track(track_index)
         track.mixer_device.panning.value = pan
         return {"track_index": track_index, "pan": track.mixer_device.panning.value}
 
     def _set_track_mute(self, track_index, muted):
-        if track_index < 0 or track_index >= len(self._song.tracks):
-            raise IndexError("Track index out of range")
-        self._song.tracks[track_index].mute = muted
-        return {"track_index": track_index, "mute": self._song.tracks[track_index].mute}
+        track = self._resolve_track(track_index)
+        if track_index == -1:
+            raise RuntimeError("Master track cannot be muted")
+        track.mute = muted
+        return {"track_index": track_index, "mute": track.mute}
 
     def _set_track_solo(self, track_index, soloed):
-        if track_index < 0 or track_index >= len(self._song.tracks):
-            raise IndexError("Track index out of range")
-        self._song.tracks[track_index].solo = soloed
-        return {"track_index": track_index, "solo": self._song.tracks[track_index].solo}
+        track = self._resolve_track(track_index)
+        if track_index == -1:
+            raise RuntimeError("Master track cannot be soloed")
+        track.solo = soloed
+        return {"track_index": track_index, "solo": track.solo}
 
     def _set_track_arm(self, track_index, armed):
         if track_index < 0 or track_index >= len(self._song.tracks):
@@ -1218,13 +1450,16 @@ class AbletonMCP(ControlSurface):
         track.arm = armed
         return {"track_index": track_index, "arm": track.arm}
 
+    def _set_track_fold(self, track_index, folded):
+        """Fold or unfold a group track so its children become visible/invisible."""
+        track = self._resolve_track(track_index)
+        if not track.is_foldable:
+            raise RuntimeError("Track is not a group track")
+        track.fold_state = folded
+        return {"track_index": track_index, "folded": track.fold_state}
+
     def _toggle_device(self, track_index, device_index, enabled):
-        if track_index == -1:
-            track = self._song.master_track
-        elif 0 <= track_index < len(self._song.tracks):
-            track = self._song.tracks[track_index]
-        else:
-            raise IndexError("Track index out of range")
+        track = self._resolve_track(track_index)
         if device_index < 0 or device_index >= len(track.devices):
             raise IndexError("Device index out of range")
         track.devices[device_index].parameters[0].value = 1.0 if enabled else 0.0
